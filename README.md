@@ -84,10 +84,11 @@ DOFBOT の例:
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod の例（Freenove Server の `Control` が公開するメソッドを RPC で呼びます）:
+Hexapod の例（`move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, `servopower` を RPC で呼べます）:
 
 ```python
 robot.call("stop")
+robot.call("move", 1, 5, 0, 0)
 ```
 
 CLI でも確認できます。
@@ -115,4 +116,3 @@ python3 -m venv .venv
 - 最初は低速・小さい動きで試してください。
 - 異常時はロボットの電源を切れる状態で実験してください。
 - `scripts/stop-camera-containers.sh` は実行中の全 Docker コンテナを止めます。ロボット専用 Raspberry Pi でだけ使ってください。
-
