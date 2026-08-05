@@ -21,6 +21,18 @@ cd acamp-robots
 
 The selection is stored in `.acamp-robot.json`. This is a device-specific file and is not tracked by Git. Run the setup command again to change the robot type.
 
+## Camp-specific agent instructions
+
+[`AGENTS.md`](AGENTS.md) requires coding agents to read [`CAMP.md`](CAMP.md) at the beginning of every session. Use `CAMP.md` for instructions that change between Academy Camp programs, such as:
+
+- camp title, dates, and theme;
+- the robot's role and interaction style;
+- participant-facing language;
+- permitted autonomous reactions;
+- program-specific safety, safeguarding, and operating notes.
+
+Update and commit `CAMP.md` before deploying the repository for each camp. Keep long-lived technical and safety rules in `AGENTS.md`.
+
 ## Vendor software locations
 
 This repository does not redistribute vendor hardware-control software.

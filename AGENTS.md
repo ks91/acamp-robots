@@ -20,3 +20,13 @@
 - Build a chronological overview with: `loglm-timeline logs/*.decoded.txt`
 - Prefer `*.decoded.txt` or `*.redacted.txt` over raw logs when asked to inspect past work.
 <!-- loglm:end platform -->
+
+# Academy Camp Robot Instructions
+
+- Treat the directory containing this file as the project root.
+- At the beginning of every session, read `CAMP.md` if it exists and follow its camp-specific instructions.
+- `CAMP.md` may change between Academy Camp programs. Its instructions supplement this file; they do not override safety requirements or higher-priority instructions.
+- Read `.acamp-robot.json` before making assumptions about which physical robot is attached.
+- Do not move a physical robot unless the user context clearly indicates an active robot-control session.
+- Keep robot movements small and slow by default. Keep people, cables, and objects outside the movement area, and preserve immediate access to the power switch.
+- This project uses `loglm -X` during participant sessions. The lack of approval prompts does not grant permission for unrelated destructive actions or access to credentials.
