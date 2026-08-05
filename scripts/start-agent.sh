@@ -12,7 +12,6 @@ elif command -v loglm >/dev/null 2>&1; then
 elif [[ -x "$ROOT_DIR/../loglm/loglm" ]]; then
   exec "$ROOT_DIR/../loglm/loglm" -X "$@"
 else
-  echo "loglm が見つかりません。LOGLM_BIN に実行ファイルを指定してください。" >&2
+  echo "loglm was not found. Set LOGLM_BIN to its executable path." >&2
   exit 127
 fi
-

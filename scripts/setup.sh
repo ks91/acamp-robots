@@ -5,14 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROBOT=""
 
 usage() {
-  echo "使い方: ./scripts/setup.sh --robot arm|hexapod"
+  echo "Usage: ./scripts/setup.sh --robot arm|hexapod"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --robot) ROBOT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "不明な引数: $1" >&2; usage >&2; exit 2 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -30,15 +30,14 @@ sys.path.insert(0, str(root / "src"))
 from acamp_robots.config import RobotConfig, save_config
 
 path = save_config(RobotConfig(robot=sys.argv[2]), root)
-print(f"設定を書きました: {path}")
+print(f"Wrote configuration: {path}")
 PY
 
 python3 -m venv "$ROOT_DIR/.venv"
 "$ROOT_DIR/.venv/bin/python" -m pip install -e "$ROOT_DIR"
 
 if [[ "$ROBOT" == "arm" ]]; then
-  echo "DOFBOT を選びました。README に従って hardware/Arm_Lib.py を配置してください。"
+  echo "Selected DOFBOT. Follow the README to install hardware/Arm_Lib.py."
 else
-  echo "Freenove Hexapod を選びました。README に従って vendor server を配置してください。"
+  echo "Selected Freenove Hexapod. Follow the README to install the vendor server."
 fi
-

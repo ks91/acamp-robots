@@ -1,43 +1,43 @@
 # Academy Camp Robots
 
-サイエンスキャンプ「アカデミーキャンプ」で、コーディング・エージェントからロボットを動かすための小さな制御環境です。音声機能、01、LiveKit は使いません。
+A small robot-control environment for using coding agents at the Academy Camp science camp. It intentionally does not depend on voice features, 01, or LiveKit.
 
-対応機種は次の2種類です。
+Supported robots:
 
-- Yahboom DOFBOT ロボットアーム
+- Yahboom DOFBOT robot arm
 - Freenove Big Hexapod Robot Kit
 
-## Raspberry Pi への準備
+## Raspberry Pi setup
 
-この public リポジトリを Raspberry Pi に clone し、使う機種を一度だけ選びます。
+Clone this public repository onto the Raspberry Pi, then select the robot connected to that Pi:
 
 ```bash
-git clone <このリポジトリのURL> acamp-robots
+git clone <repository-url> acamp-robots
 cd acamp-robots
 ./scripts/setup.sh --robot arm       # DOFBOT
-# または
+# or
 ./scripts/setup.sh --robot hexapod  # Freenove
 ```
 
-設定は `.acamp-robot.json` に保存されます。このファイルは Raspberry Pi ごとの設定なので Git には入りません。機種を変えるときは setup をもう一度実行します。
+The selection is stored in `.acamp-robot.json`. This is a device-specific file and is not tracked by Git. Run the setup command again to change the robot type.
 
-## ベンダー提供ソフトウェアの置き場所
+## Vendor software locations
 
-このリポジトリはベンダーのハードウェア制御コードを再配布しません。
+This repository does not redistribute vendor hardware-control software.
 
 ### DOFBOT
 
-DOFBOT に付属する `Arm_Lib.py` を次の場所に置いてください。
+Place the `Arm_Lib.py` supplied with the DOFBOT at:
 
 ```text
 hardware/Arm_Lib.py
 ```
 
-`Arm_Lib.py` はライセンスが明確でないため、このリポジトリには含めず `.gitignore` でも除外しています。DOFBOT の公式イメージやメーカー提供物から、各 Raspberry Pi に直接コピーしてください。
+The licensing terms for `Arm_Lib.py` do not appear to permit redistribution, so the file is excluded from this repository and listed in `.gitignore`. Copy it directly to each Raspberry Pi from the official DOFBOT image or another vendor-provided source.
 
 ### Freenove Hexapod
 
-Freenove の Raspberry Pi 用 Server 一式が、標準では次の配置になるようにします。
+By default, place the complete Freenove Raspberry Pi Server directory at:
 
 ```text
 hardware/freenove/Code/Server/main.py
@@ -45,30 +45,30 @@ hardware/freenove/Code/Server/control.py
 ...
 ```
 
-別の場所を使う場合は `HEXAPOD_SERVER_DIR` を指定できます。Freenove の配布物には独自のライセンス条件があるため、その `LICENSE.txt` を確認して従ってください。
+Set `HEXAPOD_SERVER_DIR` to use another location. Review and follow the `LICENSE.txt` included with the Freenove distribution.
 
-## セッションを始める
+## Starting a session
 
-SSH で Raspberry Pi に入り、次を実行します。
+Connect to the Raspberry Pi over SSH and run:
 
 ```bash
 ./scripts/start-agent.sh
 ```
 
-このスクリプトは機種に合わせた準備をしてから `loglm -X` を起動します。
+The script prepares the selected robot and then starts `loglm -X`.
 
-- DOFBOT: 実行中の Docker コンテナを停止し、カメラを解放します。処理は毎回安全に再実行できるので、電源投入後の最初のセッションで確実に行われます。
-- Hexapod: ローカル Unix ソケットの RPC ブリッジを、まだ動いていない場合だけ起動します。
+- DOFBOT: stops all running Docker containers to release the camera. The operation is idempotent and therefore reliably runs during the first session after every boot.
+- Hexapod: starts the local Unix-socket RPC bridge if it is not already running.
 
-`-X` はエージェントの実行確認を省略します。参加者の体験を止めないための運用ですが、Raspberry Pi には秘密情報や不要な認証情報を置かず、ロボットの周囲を片づけ、非常停止できる大人が見守ってください。
+The `-X` option suppresses individual execution-approval prompts. This prioritizes a smooth participant experience, but it also gives the coding agent broad authority. Do not store secrets or unnecessary credentials on the Raspberry Pi. Clear the area around the robot and ensure that an adult can cut its power immediately.
 
-`loglm` が PATH にない場合は指定できます。
+If `loglm` is not on `PATH`, specify its executable:
 
 ```bash
 LOGLM_BIN=../loglm/loglm ./scripts/start-agent.sh
 ```
 
-## Python から制御する
+## Python API
 
 ```python
 from pathlib import Path
@@ -78,29 +78,29 @@ root = Path.cwd()
 robot = create_controller(load_config(root), root)
 ```
 
-DOFBOT の例:
+DOFBOT example:
 
 ```python
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod の例（`move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, `servopower` を RPC で呼べます）:
+Hexapod example (`move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
 
 ```python
 robot.call("stop")
 robot.call("move", 1, 5, 0, 0)
 ```
 
-CLI でも確認できます。
+The command-line interface provides the same basic access:
 
 ```bash
 .venv/bin/acamp-robot status
 .venv/bin/acamp-robot call stop
 ```
 
-## 開発とテスト
+## Development and testing
 
-実機は不要です。
+No physical robot is required:
 
 ```bash
 python3 -m venv .venv
@@ -108,11 +108,11 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-テストでは外部 `Arm_Lib.py` と Unix ソケット RPC を偽物に差し替えます。実機で試す前に、机上で制御ロジックを検証できます。
+The tests replace the external `Arm_Lib.py` and Unix-socket RPC endpoint with test doubles, allowing control logic to be checked before using real hardware.
 
-## 安全
+## Safety
 
-- アームや脚の可動範囲に、顔、指、ケーブルを入れないでください。
-- 最初は低速・小さい動きで試してください。
-- 異常時はロボットの電源を切れる状態で実験してください。
-- `scripts/stop-camera-containers.sh` は実行中の全 Docker コンテナを止めます。ロボット専用 Raspberry Pi でだけ使ってください。
+- Keep faces, fingers, and cables outside the arm and leg movement areas.
+- Begin with slow, small movements.
+- Test with the robot's power switch within immediate reach.
+- `scripts/stop-camera-containers.sh` stops every running Docker container. Use it only on a dedicated robot Raspberry Pi.

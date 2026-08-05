@@ -18,17 +18,17 @@ class ArmController:
 
     def __init__(self, library_path: Path):
         if not library_path.is_file():
-            raise RobotError(f"Arm_Lib.py が見つかりません: {library_path}")
+            raise RobotError(f"Arm_Lib.py was not found: {library_path}")
         spec = importlib.util.spec_from_file_location("acamp_vendor_arm_lib", library_path)
         if spec is None or spec.loader is None:
-            raise RobotError(f"Arm_Lib.py を読み込めません: {library_path}")
+            raise RobotError(f"Arm_Lib.py could not be loaded: {library_path}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.device = module.Arm_Device()
 
     def move_joints(self, joints: list[int], duration_ms: int = 1000) -> Any:
         if len(joints) != 6:
-            raise ValueError("joints は6個の角度を指定してください")
+            raise ValueError("joints must contain six angles")
         return self.device.Arm_serial_servo_write6_array(joints, duration_ms)
 
     def stop(self) -> Any:
@@ -58,10 +58,10 @@ class HexapodController:
                 client.sendall(json.dumps(request).encode("utf-8") + b"\n")
                 response = self._receive_line(client)
         except OSError as exc:
-            raise RobotError(f"ヘクサポッド RPC に接続できません: {exc}") from exc
+            raise RobotError(f"Could not connect to the hexapod RPC bridge: {exc}") from exc
         message = json.loads(response.decode("utf-8"))
         if not message.get("ok"):
-            raise RobotError(message.get("error", "ヘクサポッド RPC エラー"))
+            raise RobotError(message.get("error", "Hexapod RPC error"))
         return message.get("result")
 
     @staticmethod
@@ -73,7 +73,7 @@ class HexapodController:
                 break
             data.extend(chunk)
         if not data:
-            raise RobotError("ヘクサポッド RPC から応答がありません")
+            raise RobotError("The hexapod RPC bridge returned no response")
         return bytes(data).split(b"\n", 1)[0]
 
     def status(self) -> Any:
@@ -89,4 +89,3 @@ def create_controller(config: RobotConfig, root: Path | None = None) -> ArmContr
         path = Path(config.arm_lib)
         return ArmController(path if path.is_absolute() else root / path)
     return HexapodController(config.hexapod_socket)
-

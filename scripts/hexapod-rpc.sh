@@ -12,19 +12,18 @@ alive() { [[ -f "$PID_FILE" ]] && kill -0 "$(tr -d '\n' < "$PID_FILE")" 2>/dev/n
 
 case "$ACTION" in
   start)
-    if alive; then echo "ヘクサポッド RPC は起動済みです。"; exit 0; fi
+    if alive; then echo "The hexapod RPC bridge is already running."; exit 0; fi
     if [[ ! -f "$SERVER_DIR/main.py" ]]; then
-      echo "Freenove server が見つかりません: $SERVER_DIR" >&2
+      echo "The Freenove server was not found: $SERVER_DIR" >&2
       exit 1
     fi
     rm -f "$SOCKET"
     nohup python3 "$ROOT_DIR/scripts/vendor_hexapod_bridge.py" --socket "$SOCKET" --server-dir "$SERVER_DIR" >>"$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
-    for _ in {1..20}; do [[ -S "$SOCKET" ]] && { echo "ヘクサポッド RPC を起動しました。"; exit 0; }; sleep 0.25; done
-    echo "RPC の起動に失敗しました。ログ: $LOG_FILE" >&2; exit 1
+    for _ in {1..20}; do [[ -S "$SOCKET" ]] && { echo "The hexapod RPC bridge has started."; exit 0; }; sleep 0.25; done
+    echo "The RPC bridge failed to start. See: $LOG_FILE" >&2; exit 1
     ;;
-  status) alive && echo "ヘクサポッド RPC は起動中です。" || { echo "停止中です。"; exit 1; } ;;
+  status) alive && echo "The hexapod RPC bridge is running." || { echo "The bridge is stopped."; exit 1; } ;;
   stop) if alive; then kill "$(tr -d '\n' < "$PID_FILE")"; fi; rm -f "$PID_FILE" "$SOCKET" ;;
-  *) echo "使い方: $0 start|status|stop" >&2; exit 2 ;;
+  *) echo "Usage: $0 start|status|stop" >&2; exit 2 ;;
 esac
-

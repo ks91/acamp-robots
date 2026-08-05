@@ -9,13 +9,13 @@ from .controller import HexapodController, create_controller
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="アカデミーキャンプ ロボット制御 CLI")
+    parser = argparse.ArgumentParser(description="Academy Camp robot control CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd())
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("status", help="設定または RPC の状態を表示")
-    call = subparsers.add_parser("call", help="ロボットのメソッドを呼ぶ")
+    subparsers.add_parser("status", help="Show configuration or RPC status")
+    call = subparsers.add_parser("call", help="Call a robot method")
     call.add_argument("method")
-    call.add_argument("args", nargs="*", help="JSON として解釈する引数")
+    call.add_argument("args", nargs="*", help="Arguments parsed as JSON")
     ns = parser.parse_args(argv)
     config = load_config(ns.root)
     controller = create_controller(config, ns.root)
@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         args = [json.loads(value) for value in ns.args]
         if ns.method.startswith("_"):
-            parser.error("_ で始まるメソッドは呼べません")
+            parser.error("Methods beginning with an underscore cannot be called")
         target = getattr(controller, ns.method, None)
         result = target(*args) if callable(target) else controller.call(ns.method, *args)
     if result is not None:
@@ -35,4 +35,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

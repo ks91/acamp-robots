@@ -31,7 +31,6 @@ def load_config(root: Path | None = None) -> RobotConfig:
     path = root / CONFIG_NAME
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} がありません。先に ./scripts/setup.sh --robot arm または hexapod を実行してください。"
+            f"{path} does not exist. Run ./scripts/setup.sh --robot arm or hexapod first."
         )
     return RobotConfig(**json.loads(path.read_text(encoding="utf-8")))
-

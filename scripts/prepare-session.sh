@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT_DIR/.acamp-robot.json"
 
 if [[ ! -f "$CONFIG" ]]; then
-  echo "ロボットが未設定です。./scripts/setup.sh --robot arm|hexapod を実行してください。" >&2
+  echo "No robot is configured. Run ./scripts/setup.sh --robot arm|hexapod first." >&2
   exit 2
 fi
 
@@ -16,7 +16,6 @@ if [[ "$ROBOT" == "arm" ]]; then
 elif [[ "$ROBOT" == "hexapod" ]]; then
   "$ROOT_DIR/scripts/hexapod-rpc.sh" start
 else
-  echo "未対応のロボット設定: $ROBOT" >&2
+  echo "Unsupported robot configuration: $ROBOT" >&2
   exit 2
 fi
-
