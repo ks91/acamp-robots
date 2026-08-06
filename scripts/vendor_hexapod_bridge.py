@@ -11,6 +11,8 @@ import threading
 import time
 from pathlib import Path
 
+BRIDGE_PROTOCOL_VERSION = 2
+
 
 class FreenoveDevice:
     """Stable API over Freenove's command-queue based Control class."""
@@ -138,7 +140,7 @@ class Handler(socketserver.StreamRequestHandler):
             kwargs = request.get("kwargs", {})
             try:
                 if method == "ping":
-                    result = {"pong": True}
+                    result = {"pong": True, "protocol_version": BRIDGE_PROTOCOL_VERSION}
                 elif method == "shutdown":
                     if self.server.device is not None:
                         self.server.device.servopower(False)

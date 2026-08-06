@@ -81,6 +81,8 @@ The script prepares the selected robot and then starts `loglm -X`.
 
 Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. A status containing `bridge_ready: true` and `hardware_initialized: false` is therefore normal. After checking the movement area, use `stand` to initialize the hardware, enable servo power, and request the neutral standing posture. Other movement commands are rejected until initialization succeeds.
 
+On Raspberry Pi systems with an available user systemd manager, the bridge runs as a transient user service. This keeps it alive after an SSH or coding-agent shell command finishes. The script falls back to `nohup` on development systems without user systemd. After pulling bridge changes, run `./scripts/hexapod-rpc.sh start`; an incompatible older bridge is detected and replaced automatically.
+
 The `-X` option suppresses individual execution-approval prompts. This prioritizes a smooth participant experience, but it also gives the coding agent broad authority. Do not store secrets or unnecessary credentials on the Raspberry Pi. Clear the area around the robot and ensure that an adult can cut its power immediately.
 
 If `loglm` is not on `PATH`, specify its executable:

@@ -54,6 +54,8 @@
 - Before the first DOFBOT session after a boot, run `scripts/stop-camera-containers.sh` to release the camera. `scripts/start-agent.sh` performs this preparation automatically.
 - Freenove Hexapod (`hexapod`) is controlled through the local Unix-socket RPC bridge because its hardware libraries belong to the system Python environment. Do not import those hardware libraries into the project virtual environment.
 - Before a Hexapod session, start the bridge with `scripts/hexapod-rpc.sh start`. `scripts/start-agent.sh` performs this preparation automatically.
+- On Raspberry Pi systems with a user systemd manager, `hexapod-rpc.sh` runs the bridge as a transient user service so it survives the end of an agent shell command. Do not replace this with an ad-hoc foreground or `nohup` process.
+- After pulling changes to the bridge, run `scripts/hexapod-rpc.sh start`; it compares the RPC protocol version and replaces an incompatible running bridge automatically.
 - A Hexapod status of `bridge_ready: true` and `hardware_initialized: false` is the normal safe state before servo activation. It does not mean that vendor files or the robot are missing.
 - After the user confirms the movement area is safe, a request to stand should be executed directly with `.venv/bin/acamp-robot call stand`. The `stand` command performs the required first hardware initialization, enables servo power, and requests the neutral standing posture.
 - Do not inspect vendor source code or refuse merely because `hardware_initialized` is false when the user has confirmed safety and requested `stand` or servo power.
