@@ -70,7 +70,7 @@
 - Staff, not participants, are responsible for clearing people, cables, tools, and loose objects from the movement area and preserving immediate access to the power switch before the session begins.
 - When `ACAMP_PHYSICAL_ROBOT_READY=1`, execute participant-requested routine bounded actions without asking for confirmation, permission, or a safety phrase. Do not ask questions such as "Is the area safe?" or require replies such as "安全です".
 - A participant's clear request for a routine action is sufficient authorization within a prepared session. Execute it promptly and report the result briefly.
-- Routine bounded actions include `stand`, `stop`, conservative head/posture changes, and `walk` for at most five seconds within the bridge limits.
+- Routine bounded actions include `stand`, `stop`, `rest`, conservative head/posture changes, and `walk` for at most five seconds within the bridge limits.
 - Keep movements small, slow, and brief by default. Return the robot to a stable stopped posture after an experiment.
 - Do not perform servo calibration, disable limits, issue unbounded walking commands, make large arm sweeps, or use high-speed motion in participant sessions. Do not turn these into participant confirmation questions; explain that the operation is unavailable and offer a bounded alternative.
 - Stop or refuse motion without asking the participant when an actual hazard is reported or observed, the robot configuration is missing, the bridge reports a failure, or the requested action cannot stay within the enforced limits.
@@ -78,6 +78,8 @@
 - If a command fails or times out, do not blindly repeat it: first assume the previous command may have partially executed, stop motion when safe, and inspect status.
 - Use the direction-name API `.venv/bin/acamp-robot call walk DIRECTION DURATION` for participant requests to move forward, backward, left, or right. Valid English direction values are `forward`, `backward`, `left`, and `right`.
 - Never infer or guess vendor coordinates from natural-language directions. Freenove uses positive `y` for forward and positive `x` for right, but this mapping belongs inside `walk`, not in agent-generated command arguments.
+- Translate participant requests meaning "rest and release servo power"—including `休め`, `休んで`, `おやすみ`, `寝て`, `力を抜いて`, and explicit requests to turn the servos off—to `.venv/bin/acamp-robot call rest`. Execute it promptly in a prepared session and report that servo power is off.
+- Distinguish resting from stopping: `止まれ` or "stop" maps to `stop` and retains servo power so the robot can hold its posture; `休め` maps to `rest`, which stops motion and disables servo power. Do not substitute `stop` or a posture command for `rest`.
 - Treat questions such as "What can you see?" or their Japanese equivalents as camera requests, not status requests. Run `.venv/bin/acamp-robot call camera_capture view.jpg`, read the returned image path, and inspect that actual image with an image-capable tool before answering. Never infer visual content from robot status.
 - Hexapod camera capture is available while `hardware_initialized` is false and must not initialize or enable the servos. Do not refuse a visual request merely because the motion hardware is uninitialized.
 - If capture fails, state the concrete camera error. Do not claim that no visual capability exists until `camera_capture` itself has failed.

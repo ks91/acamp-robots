@@ -7,7 +7,7 @@ SOCKET="${HEXAPOD_RPC_SOCKET:-/tmp/acamp-hexapod.sock}"
 PID_FILE="${HEXAPOD_RPC_PID_FILE:-/tmp/acamp-hexapod-rpc.pid}"
 LOG_FILE="${HEXAPOD_RPC_LOG:-/tmp/acamp-hexapod-rpc.log}"
 BRIDGE="$ROOT_DIR/scripts/vendor_hexapod_bridge.py"
-BRIDGE_PROTOCOL_VERSION=5
+BRIDGE_PROTOCOL_VERSION=6
 SYSTEMD_UNIT="acamp-hexapod-rpc"
 
 if [[ -n "${HEXAPOD_SERVER_DIR:-}" ]]; then

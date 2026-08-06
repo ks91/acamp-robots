@@ -120,6 +120,8 @@ Hexapod example:
 ```python
 robot.call("stand")
 robot.call("stop")
+# Stop motion and switch servo power off.
+robot.call("rest")
 # Walk forward for one second. Named directions avoid vendor-coordinate mistakes.
 robot.call("walk", "forward", 1.0)
 # Capture a frame without initializing or enabling the servos.
@@ -135,6 +137,8 @@ The bridge also exposes the capabilities from the previous `multimodal-hexapod-r
 ```
 
 When a participant asks what the robot can see, the agent should call `camera_capture`, inspect the returned image file, and answer from the image. A status response contains no visual information. Camera capture deliberately works before servo initialization.
+
+`stop` stops walking while retaining servo power and the current posture. `rest` stops motion and disables servo power. Participant expressions such as `休め`, `休んで`, and `おやすみ` map to `rest`.
 
 The command-line interface provides the same basic access:
 

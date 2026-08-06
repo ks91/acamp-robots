@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 5
+BRIDGE_PROTOCOL_VERSION = 6
 
 
 class FreenoveDevice:
@@ -70,6 +70,14 @@ class FreenoveDevice:
             self.servopower(True)
             self.position(0, 0, 0)
         return {"accepted": True, "posture": "stand"}
+
+    def rest(self):
+        """Stop all motion and disable servo power without initializing hardware."""
+        if not self.hardware_initialized:
+            self._servo_power = False
+            return {"accepted": True, "servo_power": False, "already_resting": True}
+        self.servopower(False)
+        return {"accepted": True, "servo_power": False}
 
     def connect(self):
         if not self.control.condition_thread.is_alive():
@@ -401,7 +409,7 @@ class FreenoveDevice:
                 "attitude", "balance", "ball_start", "ball_state", "ball_stop",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
                 "head_horizontal", "head_vertical", "led_color", "led_mode", "position",
-                "move", "power", "servopower", "set_leg_joint_angles",
+                "move", "power", "rest", "servopower", "set_leg_joint_angles",
                 "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
                 "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
                 "stand", "stop", "timed_move", "walk",
@@ -456,7 +464,7 @@ class Handler(socketserver.StreamRequestHandler):
                 else:
                     peripheral_methods = {
                         "buzzer_off", "buzzer_on", "camera_capture", "capabilities",
-                        "led_color", "led_mode", "power", "sonic",
+                        "led_color", "led_mode", "power", "rest", "sonic",
                     }
                     if not self.server.device.hardware_initialized and method not in peripheral_methods:
                         if method not in {"connect", "servopower", "stand"}:

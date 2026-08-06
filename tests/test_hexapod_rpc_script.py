@@ -69,7 +69,10 @@ def test_rpc_script_waits_for_a_real_health_response(tmp_path):
         assert before_power["result"]["bridge_ready"] is True
         assert before_power["result"]["hardware_initialized"] is False
         ping = rpc_call(env["HEXAPOD_RPC_SOCKET"], "ping")
-        assert ping["result"]["protocol_version"] == 5
+        assert ping["result"]["protocol_version"] == 6
+        rested = rpc_call(env["HEXAPOD_RPC_SOCKET"], "rest")
+        assert rested["result"]["servo_power"] is False
+        assert not marker.exists(), "rest must not initialize dormant hardware"
         captured = rpc_call(env["HEXAPOD_RPC_SOCKET"], "camera_capture", "view.jpg")
         assert captured["ok"] is True
         assert Path(captured["result"]).read_bytes() == b"fake-jpeg-data"

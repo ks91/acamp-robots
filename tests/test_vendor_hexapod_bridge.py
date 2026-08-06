@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 5
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 6
 
 
 class FakeThread:
@@ -50,7 +50,7 @@ def test_bridge_preserves_the_legacy_hexapod_api_surface():
         "sonic", "power", "ball_start", "ball_stop", "ball_state",
         "set_leg_position", "set_leg_positions", "set_leg_servo_angles",
         "set_leg_servo_angles_all", "set_leg_joint_angles",
-        "set_leg_joint_angles_all",
+        "set_leg_joint_angles_all", "rest",
     }
     assert expected <= set(MODULE.FreenoveDevice(FakeControl()).capabilities())
 
@@ -79,6 +79,27 @@ def test_stand_enables_power_and_requests_neutral_posture():
     assert control.servo_power_disable.value == "off"
     assert control.command_queue == ["CMD_POSITION", "0", "0", "0"]
     assert robot.status()["servo_power"] is True
+
+
+def test_rest_stops_motion_and_disables_servo_power():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    robot.servopower(True)
+    result = robot.rest()
+    assert result == {"accepted": True, "servo_power": False}
+    assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
+    assert control.servo_power_disable.value == "on"
+    assert robot.status()["servo_power"] is False
+
+
+def test_rest_does_not_initialize_hardware_when_already_resting():
+    robot = MODULE.FreenoveDevice(server_dir="/vendor/not-needed")
+    assert robot.rest() == {
+        "accepted": True,
+        "servo_power": False,
+        "already_resting": True,
+    }
+    assert robot.hardware_initialized is False
 
 
 def test_timed_move_stops_on_the_server_side():

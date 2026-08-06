@@ -49,6 +49,15 @@ def test_agents_uses_a_real_camera_frame_for_visual_questions():
     assert "available while `hardware_initialized` is false" in agents
 
 
+def test_agents_translates_rest_requests_to_servo_power_off():
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "`休め`" in agents
+    assert ".venv/bin/acamp-robot call rest" in agents
+    assert "`止まれ`" in agents
+    assert "retains servo power" in agents
+    assert "disables servo power" in agents
+
+
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "under `skills/`" in agents
