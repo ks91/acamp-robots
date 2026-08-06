@@ -72,6 +72,8 @@ The script prepares the selected robot and then starts `loglm -X`.
 - DOFBOT: stops all running Docker containers to release the camera. The operation is idempotent and therefore reliably runs during the first session after every boot.
 - Hexapod: starts the local Unix-socket RPC bridge if it is not already running.
 
+Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. After checking the movement area, explicitly call `servopower true` before any movement command. Other hardware commands are rejected until that step succeeds.
+
 The `-X` option suppresses individual execution-approval prompts. This prioritizes a smooth participant experience, but it also gives the coding agent broad authority. Do not store secrets or unnecessary credentials on the Raspberry Pi. Clear the area around the robot and ensure that an adult can cut its power immediately.
 
 If `loglm` is not on `PATH`, specify its executable:
@@ -96,11 +98,12 @@ DOFBOT example:
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod example (`move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
+Hexapod example (`move`, `timed_move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
 
 ```python
 robot.call("stop")
-robot.call("move", 1, 5, 0, 0)
+# Move for one second; the bridge guarantees the stop even if the client disconnects.
+robot.call("timed_move", 1.0, 1, 5, 0, 0)
 ```
 
 The command-line interface provides the same basic access:
