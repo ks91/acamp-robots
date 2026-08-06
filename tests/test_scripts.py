@@ -1,39 +1,42 @@
-import json
 import os
 import subprocess
 from pathlib import Path
+
+from acamp_robots.registry import load_robot_specs
 
 
 ROOT = Path(__file__).parents[1]
 
 
-def run_prepare(tmp_path, robot):
+def test_prepare_session_delegates_without_robot_type_conditionals(tmp_path):
     root = tmp_path / "repo"
-    (root / "scripts").mkdir(parents=True)
-    (root / ".acamp-robot.json").write_text(json.dumps({"robot": robot}))
-    source = (ROOT / "scripts" / "prepare-session.sh").read_text()
-    (root / "scripts" / "prepare-session.sh").write_text(source)
-    marker = root / "called"
-    target = "stop-camera-containers.sh" if robot == "arm" else "hexapod-rpc.sh"
-    script = root / "scripts" / target
-    script.write_text(f"#!/bin/sh\necho \"$*\" > '{marker}'\n")
-    os.chmod(root / "scripts" / "prepare-session.sh", 0o755)
-    os.chmod(script, 0o755)
-    subprocess.run([root / "scripts" / "prepare-session.sh"], check=True)
-    return marker.read_text().strip()
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+    prepare = scripts / "prepare-session.sh"
+    prepare.write_text((ROOT / "scripts/prepare-session.sh").read_text())
+    admin = scripts / "robot-admin.py"
+    admin.write_text("from pathlib import Path\nPath(__file__).parents[1].joinpath('called').write_text('prepare')\n")
+    prepare.chmod(0o755)
+    result = subprocess.run([prepare], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert (root / "called").read_text() == "prepare"
+    source = prepare.read_text()
+    assert '== "arm"' not in source
+    assert '== "hexapod"' not in source
 
 
-def test_arm_preparation_stops_camera_container(tmp_path):
-    assert run_prepare(tmp_path, "arm") == ""
+def test_registry_owns_each_robot_preparation_command():
+    specs = load_robot_specs(ROOT)
+    assert specs["arm"].prepare_command == ("scripts/stop-camera-containers.sh",)
+    assert specs["hexapod"].prepare_command == ("scripts/hexapod-rpc.sh", "start")
 
 
-def test_hexapod_preparation_starts_rpc(tmp_path):
-    assert run_prepare(tmp_path, "hexapod") == "start"
-
-
-def test_arm_setup_uses_raspberry_pi_system_hardware_packages():
-    setup = (ROOT / "scripts" / "setup.sh").read_text()
-    assert 'python3 -m venv --system-site-packages "$ROOT_DIR/.venv"' in setup
+def test_setup_is_registry_driven_and_supports_generic_settings():
+    setup = (ROOT / "scripts/setup.sh").read_text()
+    assert "robot-admin.py" in setup
+    assert "--set KEY=VALUE" in setup
+    assert '== "arm"' not in setup
+    assert '== "hexapod"' not in setup
 
 
 def test_start_agent_marks_physical_session_as_ready():
@@ -43,7 +46,7 @@ def test_start_agent_marks_physical_session_as_ready():
         root = Path(directory)
         (root / "scripts").mkdir()
         start = root / "scripts" / "start-agent.sh"
-        start.write_text((ROOT / "scripts" / "start-agent.sh").read_text())
+        start.write_text((ROOT / "scripts/start-agent.sh").read_text())
         prepare = root / "scripts" / "prepare-session.sh"
         prepare.write_text("#!/bin/sh\nexit 0\n")
         fake_loglm = root / "fake-loglm"
@@ -51,10 +54,7 @@ def test_start_agent_marks_physical_session_as_ready():
         for executable in (start, prepare, fake_loglm):
             executable.chmod(0o755)
         result = subprocess.run(
-            [start],
-            env=os.environ | {"LOGLM_BIN": str(fake_loglm)},
-            text=True,
-            capture_output=True,
-            check=True,
+            [start], env=os.environ | {"LOGLM_BIN": str(fake_loglm)},
+            text=True, capture_output=True, check=True,
         )
         assert result.stdout.strip() == "1"

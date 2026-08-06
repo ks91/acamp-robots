@@ -26,11 +26,26 @@ If the Freenove Server is already installed elsewhere on the Raspberry Pi, save 
   --hexapod-server-dir "$HOME/Freenove_Hexapod/Code/Server"
 ```
 
-The selection is stored in `.acamp-robot.json`. This is a device-specific file and is not tracked by Git. Run the setup command again to change the robot type.
+The selection is stored in `.acamp-robot.json` using a robot name and a generic `settings` object. This device-specific file is not tracked by Git. Run setup again to change the robot. Existing flat configuration files from earlier versions are migrated when read.
 
-## Camp-specific agent instructions
+Robot-specific settings can be supplied without adding setup-script flags:
 
-[`AGENTS.md`](AGENTS.md) requires coding agents to read [`CAMP.md`](CAMP.md) at the beginning of every session. Use `CAMP.md` for instructions that change between Academy Camp programs, such as:
+```bash
+./scripts/setup.sh --robot hexapod \
+  --set hexapod_server_dir="$HOME/Freenove_Hexapod/Code/Server"
+```
+
+## Modular agent instructions
+
+[`AGENTS.md`](AGENTS.md) is an instruction router. At session start, an agent reads:
+
+1. [`CAMP.md`](CAMP.md) for the current program;
+2. [`.agents/common.md`](.agents/common.md) for shared operation, safety, development, and safeguarding rules;
+3. exactly one robot module selected from `.acamp-robot.json` through [`robots.json`](robots.json).
+
+DOFBOT instructions live in [`.agents/robots/arm.md`](.agents/robots/arm.md), while Hexapod instructions live in [`.agents/robots/hexapod.md`](.agents/robots/hexapod.md). An unconfigured development checkout loads no robot module and must not infer hardware from files.
+
+Use `CAMP.md` only for details that change between Academy Camp programs, such as:
 
 - camp title, dates, and theme;
 - the robot's role and interaction style;
@@ -38,7 +53,21 @@ The selection is stored in `.acamp-robot.json`. This is a device-specific file a
 - permitted autonomous reactions;
 - program-specific safety, safeguarding, and operating notes.
 
-Update and commit `CAMP.md` before deploying the repository for each camp. Keep long-lived technical and safety rules in `AGENTS.md`.
+Update and commit `CAMP.md` before deploying each camp. Do not put robot-specific body knowledge back into root `AGENTS.md` or the common module.
+
+## Robot plugin architecture
+
+[`robots.json`](robots.json) is the single registry for supported robot types. Each entry owns:
+
+- its controller factory import path;
+- robot-specific instruction module;
+- idempotent session-preparation command;
+- virtual-environment system-package policy;
+- default device settings and setup message.
+
+`RobotConfig` stores arbitrary device settings, `create_controller` loads the registered factory, and both setup and session preparation consume the same registry. They do not contain `if arm` / `if hexapod` branches.
+
+Adding another robot requires one registry entry, a controller factory, a preparation command, one instruction module, offline tests, and a documented physical acceptance test. The complete checklist is in [`.agents/README.md`](.agents/README.md). A robot is not supported merely because its name was added to the registry.
 
 ## Vendor software locations
 

@@ -1,0 +1,25 @@
+{
+  "arm": {
+    "display_name": "Yahboom DOFBOT",
+    "controller_factory": "acamp_robots.arm:create_controller",
+    "instructions": ".agents/robots/arm.md",
+    "prepare_command": ["scripts/stop-camera-containers.sh"],
+    "system_site_packages": true,
+    "default_settings": {
+      "arm_lib": "hardware/Arm_Lib.py"
+    },
+    "setup_note": "Selected DOFBOT. Install the vendor-provided hardware/Arm_Lib.py."
+  },
+  "hexapod": {
+    "display_name": "Freenove Big Hexapod",
+    "controller_factory": "acamp_robots.hexapod:create_controller",
+    "instructions": ".agents/robots/hexapod.md",
+    "prepare_command": ["scripts/hexapod-rpc.sh", "start"],
+    "system_site_packages": false,
+    "default_settings": {
+      "hexapod_socket": "/tmp/acamp-hexapod.sock",
+      "hexapod_server_dir": "hardware/freenove/Code/Server"
+    },
+    "setup_note": "Selected Freenove Hexapod. Install the vendor Server directory described in README.md."
+  }
+}

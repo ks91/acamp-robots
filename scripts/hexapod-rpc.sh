@@ -18,7 +18,9 @@ import json
 import sys
 
 try:
-    print(json.load(open(sys.argv[1], encoding="utf-8")).get("hexapod_server_dir", "hardware/freenove/Code/Server"))
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+    settings = data.get("settings", data)
+    print(settings.get("hexapod_server_dir", "hardware/freenove/Code/Server"))
 except (FileNotFoundError, ValueError):
     print("hardware/freenove/Code/Server")
 PY

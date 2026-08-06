@@ -2,7 +2,7 @@
 
 This file contains instructions for the current Academy Camp program. Coding agents must read it at the beginning of every session, as required by `AGENTS.md`.
 
-Update this file before each camp. Keep durable robot-operation rules in `AGENTS.md`; keep only program-specific context here.
+Update this file before each camp. Keep shared durable rules in `.agents/common.md`, robot-specific rules in the module registered by `robots.json`, and only program-specific context here.
 
 ## Current camp
 

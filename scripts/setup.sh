@@ -2,50 +2,42 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ADMIN="$ROOT_DIR/scripts/robot-admin.py"
 ROBOT=""
-HEXAPOD_SERVER_DIR="hardware/freenove/Code/Server"
+SETTINGS=()
 
 usage() {
-  echo "Usage: ./scripts/setup.sh --robot arm|hexapod [--hexapod-server-dir PATH]"
+  local robots
+  robots="$(python3 "$ADMIN" list --separator '|')"
+  echo "Usage: ./scripts/setup.sh --robot $robots [--set KEY=VALUE]"
+  echo "Compatibility option: --hexapod-server-dir PATH"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --robot) ROBOT="${2:-}"; shift 2 ;;
-    --hexapod-server-dir) HEXAPOD_SERVER_DIR="${2:-}"; shift 2 ;;
+    --set) SETTINGS+=("${2:-}"); shift 2 ;;
+    --hexapod-server-dir) SETTINGS+=("hexapod_server_dir=${2:-}"); shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-if [[ "$ROBOT" != "arm" && "$ROBOT" != "hexapod" ]]; then
+if [[ -z "$ROBOT" ]]; then
   usage >&2
   exit 2
 fi
 
-python3 - "$ROOT_DIR" "$ROBOT" "$HEXAPOD_SERVER_DIR" <<'PY'
-import sys
-from pathlib import Path
+CONFIGURE=(python3 "$ADMIN" configure --robot "$ROBOT")
+for setting in "${SETTINGS[@]}"; do
+  CONFIGURE+=(--set "$setting")
+done
+"${CONFIGURE[@]}"
 
-root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "src"))
-from acamp_robots.config import RobotConfig, save_config
-
-path = save_config(RobotConfig(robot=sys.argv[2], hexapod_server_dir=sys.argv[3]), root)
-print(f"Wrote configuration: {path}")
-PY
-
-if [[ "$ROBOT" == "arm" ]]; then
-  # Arm_Lib.py and OpenCV are normally supplied by the Raspberry Pi image as
-  # system packages and are intentionally not redistributed by this project.
-  python3 -m venv --system-site-packages "$ROOT_DIR/.venv"
-else
-  python3 -m venv "$ROOT_DIR/.venv"
+VENV_ARGS=()
+if [[ "$(python3 "$ADMIN" field "$ROBOT" system_site_packages)" == "true" ]]; then
+  VENV_ARGS+=(--system-site-packages)
 fi
+python3 -m venv "${VENV_ARGS[@]}" "$ROOT_DIR/.venv"
 "$ROOT_DIR/.venv/bin/python" -m pip install -e "$ROOT_DIR"
-
-if [[ "$ROBOT" == "arm" ]]; then
-  echo "Selected DOFBOT. Follow the README to install hardware/Arm_Lib.py."
-else
-  echo "Selected Freenove Hexapod. Follow the README to install the vendor server."
-fi
+python3 "$ADMIN" field "$ROBOT" setup_note
