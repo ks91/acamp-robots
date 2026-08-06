@@ -79,3 +79,28 @@ def test_camp_template_contains_operational_sections():
         "## Robot behavior", "## Safety and safeguarding", "## Operational notes",
     ):
         assert heading in camp
+
+
+def test_2026_summer_camp_instructions_capture_the_public_operating_context():
+    camp = read("CAMP.md")
+    assert "August 9–11, 2026" in camp
+    assert "17 members" in camp
+    assert "five color teams" in camp
+    assert "Research is really play" in camp
+    assert "Day 1:" in camp and "Day 2:" in camp and "Day 3:" in camp
+    assert "GAMER PAT and LaTeX" in camp
+    assert "approximately 12 robots with up to 2 additional units" in camp
+    assert "50 continuous minutes" in camp
+    assert "10 minutes of break per hour" in camp
+
+
+def test_public_camp_instructions_exclude_private_manual_data():
+    camp = read("CAMP.md")
+    assert "deliberately excludes participant and staff names" in camp
+    assert "the venue, accommodation" in camp
+    assert "never request or expose private Discord details" in camp
+    assert "Do not reveal network credentials" in camp
+    assert "do not upload, publish, or externally message any media" in camp.lower()
+    assert "room assignments" in camp
+    assert "Treat the venue, accommodation, meeting points, routes" in camp
+    assert "Never reveal, confirm, infer, geolocate" in camp
