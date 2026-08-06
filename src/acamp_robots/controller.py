@@ -21,7 +21,7 @@ class ArmController:
     JOINT_LIMITS = ((0, 180), (0, 180), (0, 180), (0, 180), (0, 270), (0, 180))
     HOME = [90, 90, 90, 90, 90, 180]
     PRESETS = {
-        "camera_forward": [90, 65, 115, 110, 90, 120],
+        "camera_forward": [90, 60, 60, 60, 90, 120],
         "camera_work_area": [90, 120, 0, 0, 90, 30],
         "color_view": [90, 120, 0, 0, 90, 30],
         "color_grab": [90, 43, 36, 40, 90, 30],
@@ -40,8 +40,8 @@ class ArmController:
     }
     POSE_DESCRIPTIONS = {
         "camera_forward": (
-            "A gentle forward-facing pose from the legacy face-forward behavior; "
-            "use it when the participant asks the arm or camera to face ahead."
+            "A forward-facing pose with horizontal end-effector elevation from the "
+            "legacy drawing behaviors; use it when the arm or camera should face ahead."
         ),
         "camera_work_area": (
             "The legacy camera pose for looking down toward the board and inspecting "
