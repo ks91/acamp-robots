@@ -112,8 +112,15 @@ robot = create_controller(load_config(root), root)
 DOFBOT example:
 
 ```python
-robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
+robot.home()
+robot.move_joint(1, 100, duration_ms=500)
+image_path = robot.camera_capture("view.jpg")
+robot.led_color(20, 0, 20)
+robot.grip_object(3.0)
+robot.rest()  # Disable servo torque.
 ```
+
+DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer control, measured object-width-to-gripper-angle conversion, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, and five-degree visual-centering corrections through `target_step`. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
 
 Hexapod example:
 
@@ -138,7 +145,7 @@ The bridge also exposes the capabilities from the previous `multimodal-hexapod-r
 
 When a participant asks what the robot can see, the agent should call `camera_capture`, inspect the returned image file, and answer from the image. A status response contains no visual information. Camera capture deliberately works before servo initialization.
 
-`stop` stops walking while retaining servo power and the current posture. `rest` stops motion and disables servo power. Participant expressions such as `休め`, `休んで`, and `おやすみ` map to `rest`.
+On the Hexapod, `stop` stops walking while retaining servo power and the current posture. `rest` stops motion and disables servo power. On DOFBOT, `stop` and `rest` disable servo torque. Participant expressions such as `休め`, `休んで`, and `おやすみ` map to `rest`.
 
 The command-line interface provides the same basic access:
 
@@ -162,6 +169,8 @@ python3 -m venv .venv
 ```
 
 The tests replace the external `Arm_Lib.py` and Unix-socket RPC endpoint with test doubles, allowing control logic to be checked before using real hardware.
+
+DOFBOT setup creates the virtual environment with access to Raspberry Pi system packages because the vendor library and OpenCV are installed separately on the robot image. If an existing arm `.venv` was created without system packages, remove only that environment and rerun `./scripts/setup.sh --robot arm`.
 
 ## Safety
 

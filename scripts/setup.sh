@@ -35,7 +35,13 @@ path = save_config(RobotConfig(robot=sys.argv[2], hexapod_server_dir=sys.argv[3]
 print(f"Wrote configuration: {path}")
 PY
 
-python3 -m venv "$ROOT_DIR/.venv"
+if [[ "$ROBOT" == "arm" ]]; then
+  # Arm_Lib.py and OpenCV are normally supplied by the Raspberry Pi image as
+  # system packages and are intentionally not redistributed by this project.
+  python3 -m venv --system-site-packages "$ROOT_DIR/.venv"
+else
+  python3 -m venv "$ROOT_DIR/.venv"
+fi
 "$ROOT_DIR/.venv/bin/python" -m pip install -e "$ROOT_DIR"
 
 if [[ "$ROBOT" == "arm" ]]; then

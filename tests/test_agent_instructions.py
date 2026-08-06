@@ -58,6 +58,15 @@ def test_agents_translates_rest_requests_to_servo_power_off():
     assert "disables servo power" in agents
 
 
+def test_agents_documents_arm_body_and_natural_language_controls():
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert ".venv/bin/acamp-robot call home" in agents
+    assert "base rotation, lower link, middle link" in agents
+    assert "wrist rotation accepts 0–270 degrees" in agents
+    assert "`grip_object WIDTH_CM`" in agents
+    assert "On DOFBOT, both an emergency stop and `rest` disable servo torque" in agents
+
+
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "under `skills/`" in agents

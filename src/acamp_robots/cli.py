@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from .config import load_config
-from .controller import HexapodController, create_controller
+from .controller import create_controller
 
 
 def parse_call_arg(value: str):
@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     controller = create_controller(config, ns.root)
 
     if ns.command == "status":
-        result = controller.status() if isinstance(controller, HexapodController) else {"robot": "arm", "ready": True}
+        result = controller.status()
     else:
         args = [parse_call_arg(value) for value in ns.args]
         if ns.method.startswith("_"):

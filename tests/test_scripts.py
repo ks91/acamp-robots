@@ -31,6 +31,11 @@ def test_hexapod_preparation_starts_rpc(tmp_path):
     assert run_prepare(tmp_path, "hexapod") == "start"
 
 
+def test_arm_setup_uses_raspberry_pi_system_hardware_packages():
+    setup = (ROOT / "scripts" / "setup.sh").read_text()
+    assert 'python3 -m venv --system-site-packages "$ROOT_DIR/.venv"' in setup
+
+
 def test_start_agent_marks_physical_session_as_ready():
     import tempfile
 
