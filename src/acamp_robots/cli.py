@@ -8,6 +8,14 @@ from .config import load_config
 from .controller import HexapodController, create_controller
 
 
+def parse_call_arg(value: str):
+    """Accept JSON values while treating ordinary words and paths as strings."""
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Academy Camp robot control CLI")
     parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -15,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("status", help="Show configuration or RPC status")
     call = subparsers.add_parser("call", help="Call a robot method")
     call.add_argument("method")
-    call.add_argument("args", nargs="*", help="Arguments parsed as JSON")
+    call.add_argument("args", nargs="*", help="JSON values or plain strings")
     ns = parser.parse_args(argv)
     config = load_config(ns.root)
     controller = create_controller(config, ns.root)
@@ -23,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     if ns.command == "status":
         result = controller.status() if isinstance(controller, HexapodController) else {"robot": "arm", "ready": True}
     else:
-        args = [json.loads(value) for value in ns.args]
+        args = [parse_call_arg(value) for value in ns.args]
         if ns.method.startswith("_"):
             parser.error("Methods beginning with an underscore cannot be called")
         target = getattr(controller, ns.method, None)

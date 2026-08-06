@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 4
+BRIDGE_PROTOCOL_VERSION = 5
 
 
 class FreenoveDevice:
@@ -204,28 +204,47 @@ class FreenoveDevice:
         )
         self._led_thread.start()
 
-    def camera_capture(self, filename="image.jpg", timeout=5.0):
+    def camera_capture(self, filename="image.jpg", timeout=10.0):
         camera = self._peripheral("camera", "camera", "Camera")
         if not hasattr(camera, "streaming"):
             raise RuntimeError("No camera device is available")
         if not camera.streaming:
             camera.start_stream()
-        frames = queue.Queue(maxsize=1)
+        wait_seconds = min(max(float(timeout), 0.1), 12.0)
+        output = getattr(camera, "streaming_output", None)
+        condition = getattr(output, "condition", None)
+        if condition is not None:
+            # Freenove's get_frame() waits forever. Waiting on its published
+            # condition directly gives us a bounded wait without leaving a
+            # blocked reader thread behind after a timeout.
+            with condition:
+                previous = output.frame
+                fresh = condition.wait_for(
+                    lambda: output.frame is not None and output.frame is not previous,
+                    timeout=wait_seconds,
+                )
+                if not fresh:
+                    raise TimeoutError("Camera did not produce a fresh frame")
+                frame = output.frame
+        else:
+            # Small vendor-compatible fallback used by test doubles and older
+            # camera wrappers that do not expose StreamingOutput.
+            frames = queue.Queue(maxsize=1)
 
-        def read_frame():
+            def read_frame():
+                try:
+                    camera.get_frame()
+                    frames.put((camera.get_frame(), None))
+                except Exception as exc:
+                    frames.put((None, exc))
+
+            threading.Thread(target=read_frame, daemon=True).start()
             try:
-                camera.get_frame()  # Discard one potentially stale frame after startup.
-                frames.put((camera.get_frame(), None))
-            except Exception as exc:
-                frames.put((None, exc))
-
-        threading.Thread(target=read_frame, daemon=True).start()
-        try:
-            frame, error = frames.get(timeout=min(max(float(timeout), 0.1), 10.0))
-        except queue.Empty as exc:
-            raise TimeoutError("Camera did not produce a frame") from exc
-        if error is not None:
-            raise error
+                frame, error = frames.get(timeout=wait_seconds)
+            except queue.Empty as exc:
+                raise TimeoutError("Camera did not produce a frame") from exc
+            if error is not None:
+                raise error
         if not frame:
             raise RuntimeError("Camera returned an empty frame")
         capture_dir = Path(os.environ.get("ACAMP_CAPTURE_DIR", "/tmp/acamp-robot-captures"))

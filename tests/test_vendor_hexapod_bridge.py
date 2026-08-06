@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 4
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 5
 
 
 class FakeThread:

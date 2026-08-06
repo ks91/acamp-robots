@@ -53,7 +53,10 @@ class HexapodController:
         }
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.settimeout(self.timeout)
+                # Starting Picamera2 and receiving its first fresh JPEG can take
+                # longer than an ordinary control request on a Raspberry Pi.
+                request_timeout = max(self.timeout, 15.0) if method == "camera_capture" else self.timeout
+                client.settimeout(request_timeout)
                 client.connect(self.socket_path)
                 client.sendall(json.dumps(request).encode("utf-8") + b"\n")
                 response = self._receive_line(client)
