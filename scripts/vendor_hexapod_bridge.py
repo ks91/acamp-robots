@@ -3,32 +3,57 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
+import queue
 import socketserver
 import sys
 import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 3
+BRIDGE_PROTOCOL_VERSION = 4
 
 
 class FreenoveDevice:
     """Stable API over Freenove's command-queue based Control class."""
 
-    def __init__(self, control):
+    _LEG_CHANNELS = [
+        (15, 14, 13),
+        (12, 11, 10),
+        (9, 8, 31),
+        (22, 23, 27),
+        (19, 20, 21),
+        (16, 17, 18),
+    ]
+
+    def __init__(self, control=None, server_dir=None):
         self.control = control
+        self.server_dir = Path(server_dir or Path.cwd()).resolve()
         self.move_speed = 8
         self._lock = threading.RLock()
         self._stop_timer = None
         self._moving = False
         self._servo_power = None
         self._last_command = None
+        self._peripherals = {}
+        self._led_thread = None
+        self._ball_thread = None
+        self._ball_stop = threading.Event()
+        self._ball_active = False
+        self._ball_tracking = False
 
-    def connect(self):
-        if not self.control.condition_thread.is_alive():
-            self.control.condition_thread.start()
+    @property
+    def hardware_initialized(self):
+        return self.control is not None
+
+    def attach_control(self, control):
+        with self._lock:
+            if self.control is None:
+                self.control = control
+                if not self.control.condition_thread.is_alive():
+                    self.control.condition_thread.start()
 
     def servopower(self, on=True):
         with self._lock:
@@ -45,6 +70,28 @@ class FreenoveDevice:
             self.servopower(True)
             self.position(0, 0, 0)
         return {"accepted": True, "posture": "stand"}
+
+    def connect(self):
+        if not self.control.condition_thread.is_alive():
+            self.control.condition_thread.start()
+        return {"connected": True}
+
+    def disconnect(self):
+        self.ball_stop()
+        self.servopower(False)
+        camera = self._peripherals.get("camera")
+        if camera is not None and getattr(camera, "streaming", False):
+            camera.stop_stream()
+        return {"connected": False}
+
+    def _peripheral(self, key, module_name, class_name):
+        with self._lock:
+            if key not in self._peripherals:
+                sys.path.insert(0, str(self.server_dir))
+                os.chdir(self.server_dir)
+                module = importlib.import_module(module_name)
+                self._peripherals[key] = getattr(module, class_name)()
+            return self._peripherals[key]
 
     def speed(self, tempo=8):
         with self._lock:
@@ -125,24 +172,225 @@ class FreenoveDevice:
 
     def head_vertical(self, angle=90):
         with self._lock:
-            self.control.servo.set_servo_angle(0, max(0, min(int(angle), 180)))
+            self.control.servo.set_servo_angle(0, max(60, min(int(angle), 180)))
 
     def head_horizontal(self, angle=90):
         with self._lock:
             self.control.servo.set_servo_angle(1, max(0, min(int(angle), 180)))
 
+    def buzzer_on(self):
+        self._peripheral("buzzer", "buzzer", "Buzzer").set_state(True)
+
+    def buzzer_off(self):
+        self._peripheral("buzzer", "buzzer", "Buzzer").set_state(False)
+
+    def led_color(self, red=255, green=255, blue=255):
+        values = [max(0, min(int(value), 255)) for value in (red, green, blue)]
+        self._run_led_command(["CMD_LED", *(str(value) for value in values)])
+
+    def led_mode(self, mode=0):
+        self._run_led_command(["CMD_LED_MOD", str(int(mode))])
+
+    def _run_led_command(self, command):
+        if self._led_thread is not None and self._led_thread.is_alive():
+            try:
+                importlib.import_module("Thread").stop_thread(self._led_thread)
+            except (ImportError, AttributeError):
+                if command[1] != "0":
+                    raise RuntimeError("The current LED animation cannot be replaced safely")
+        led = self._peripheral("led", "led", "Led")
+        self._led_thread = threading.Thread(
+            target=led.process_light_command, args=(command,), daemon=True
+        )
+        self._led_thread.start()
+
+    def camera_capture(self, filename="image.jpg", timeout=5.0):
+        camera = self._peripheral("camera", "camera", "Camera")
+        if not hasattr(camera, "streaming"):
+            raise RuntimeError("No camera device is available")
+        if not camera.streaming:
+            camera.start_stream()
+        frames = queue.Queue(maxsize=1)
+
+        def read_frame():
+            try:
+                camera.get_frame()  # Discard one potentially stale frame after startup.
+                frames.put((camera.get_frame(), None))
+            except Exception as exc:
+                frames.put((None, exc))
+
+        threading.Thread(target=read_frame, daemon=True).start()
+        try:
+            frame, error = frames.get(timeout=min(max(float(timeout), 0.1), 10.0))
+        except queue.Empty as exc:
+            raise TimeoutError("Camera did not produce a frame") from exc
+        if error is not None:
+            raise error
+        if not frame:
+            raise RuntimeError("Camera returned an empty frame")
+        capture_dir = Path(os.environ.get("ACAMP_CAPTURE_DIR", "/tmp/acamp-robot-captures"))
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(str(filename)).name or "image.jpg"
+        destination = (capture_dir / safe_name).resolve()
+        destination.write_bytes(frame)
+        return str(destination)
+
+    def sonic(self):
+        return self._peripheral("ultrasonic", "ultrasonic", "Ultrasonic").get_distance()
+
+    def power(self):
+        return self._peripheral("adc", "adc", "ADC").read_battery_voltage()
+
+    def ball_start(self):
+        self.head_vertical(90)
+        self.head_horizontal(90)
+        self._ball_active = True
+        self._ball_tracking = True
+        self._ball_stop.clear()
+        if self._ball_thread is None or not self._ball_thread.is_alive():
+            self._ball_thread = threading.Thread(target=self._ball_tracking_loop, daemon=True)
+            self._ball_thread.start()
+        return {"accepted": True, "state": "ongoing"}
+
+    def ball_stop(self):
+        self._ball_active = False
+        self._ball_tracking = False
+        self._ball_stop.set()
+        self.stop()
+        return {"state": "not tracking"}
+
+    def ball_state(self):
+        if self._ball_active:
+            return "ongoing" if self._ball_tracking else "completed"
+        return "not tracking"
+
+    def _ball_tracking_loop(self):
+        cv2 = importlib.import_module("cv2")
+        while not self._ball_stop.is_set():
+            try:
+                image_path = self.camera_capture("ball-tracking.jpg")
+                frame = cv2.imread(image_path)
+                filtered = cv2.cvtColor(cv2.GaussianBlur(frame, (3, 3), 0), cv2.COLOR_BGR2HSV)
+                binary = cv2.dilate(cv2.inRange(filtered, (0, 180, 180), (5, 255, 255)), None, iterations=1)
+                contours = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+                if not contours:
+                    self.stop()
+                    time.sleep(0.05)
+                    continue
+                contour = max(contours, key=cv2.contourArea)
+                ((x, _y), radius) = cv2.minEnclosingCircle(contour)
+                if radius < 7:
+                    self.stop()
+                    time.sleep(0.05)
+                    continue
+                distance = round(2700 / (2 * radius))
+                angle = max(-10, min(10, int((180 - x) * -0.05)))
+                step = max(-15, min(15, int((60 - distance) * -0.3)))
+                self.move(gait=1, x=0, y=step, angle=angle)
+                self._ball_tracking = not (step == 0 and angle == 0)
+            except Exception:
+                self.stop()
+                self._ball_active = False
+                self._ball_tracking = False
+                return
+            time.sleep(0.05)
+
+    def _assert_leg_index(self, leg_index):
+        if not 0 <= int(leg_index) <= 5:
+            raise ValueError("leg_index must be between 0 and 5")
+
+    def _ensure_manual_leg_allowed(self):
+        if self._moving or self._ball_active:
+            raise RuntimeError("Stop movement and ball tracking before manual leg control")
+
+    def set_leg_position(self, leg_index, x, y, z):
+        self._ensure_manual_leg_allowed()
+        leg_index = int(leg_index)
+        self._assert_leg_index(leg_index)
+        previous = list(self.control.leg_positions[leg_index])
+        self.control.leg_positions[leg_index] = [int(x), int(y), int(z)]
+        if not self.control.check_point_validity():
+            self.control.leg_positions[leg_index] = previous
+            raise ValueError("Leg position is outside the valid range")
+        self.control.set_leg_angles()
+
+    def set_leg_positions(self, positions):
+        self._ensure_manual_leg_allowed()
+        if len(positions) != 6:
+            raise ValueError("positions must contain six [x, y, z] entries")
+        previous = [list(position) for position in self.control.leg_positions]
+        for index, position in enumerate(positions):
+            if len(position) != 3:
+                self.control.leg_positions = previous
+                raise ValueError("Each leg position must contain three values")
+            self.control.leg_positions[index] = [int(value) for value in position]
+        if not self.control.check_point_validity():
+            self.control.leg_positions = previous
+            raise ValueError("Leg positions are outside the valid range")
+        self.control.set_leg_angles()
+
+    def set_leg_servo_angles(self, leg_index, a, b, c):
+        self._ensure_manual_leg_allowed()
+        leg_index = int(leg_index)
+        self._assert_leg_index(leg_index)
+        for channel, angle in zip(self._LEG_CHANNELS[leg_index], (a, b, c)):
+            self.control.servo.set_servo_angle(channel, max(0, min(int(angle), 180)))
+
+    def set_leg_servo_angles_all(self, angles):
+        if len(angles) != 6:
+            raise ValueError("angles must contain six [a, b, c] entries")
+        for index, values in enumerate(angles):
+            if len(values) != 3:
+                raise ValueError("Each leg angle entry must contain three values")
+            self.set_leg_servo_angles(index, *values)
+
+    def set_leg_joint_angles(self, leg_index, a, b, c):
+        leg_index = int(leg_index)
+        self._assert_leg_index(leg_index)
+        calibration = self.control.calibration_angles[leg_index]
+        if leg_index < 3:
+            values = (a + calibration[0], 90 - (b + calibration[1]), c + calibration[2])
+        else:
+            values = (a + calibration[0], 90 + b + calibration[1], 180 - (c + calibration[2]))
+        self.set_leg_servo_angles(leg_index, *values)
+
+    def set_leg_joint_angles_all(self, angles):
+        if len(angles) != 6:
+            raise ValueError("angles must contain six [a, b, c] entries")
+        for index, values in enumerate(angles):
+            if len(values) != 3:
+                raise ValueError("Each leg angle entry must contain three values")
+            self.set_leg_joint_angles(index, *values)
+
     def status(self):
-        return {
-            "hardware_initialized": True,
-            "control_thread_alive": self.control.condition_thread.is_alive(),
+        result = {
+            "bridge_ready": True,
+            "hardware_initialized": self.hardware_initialized,
             "moving": self._moving,
             "servo_power": self._servo_power,
             "speed": self.move_speed,
             "last_command": self._last_command,
         }
+        if self.hardware_initialized:
+            result["control_thread_alive"] = self.control.condition_thread.is_alive()
+        return result
+
+    def capabilities(self):
+        return sorted(
+            name
+            for name in (
+                "attitude", "balance", "ball_start", "ball_state", "ball_stop",
+                "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
+                "head_horizontal", "head_vertical", "led_color", "led_mode", "position",
+                "move", "power", "servopower", "set_leg_joint_angles",
+                "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
+                "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
+                "stand", "stop", "timed_move", "walk",
+            )
+        )
 
 
-def load_device(server_dir: Path):
+def load_control(server_dir: Path):
     server_dir = server_dir.resolve()
     if not server_dir.is_dir():
         raise FileNotFoundError(f"Freenove server directory not found: {server_dir}")
@@ -151,7 +399,12 @@ def load_device(server_dir: Path):
     os.chdir(server_dir)
     from control import Control  # type: ignore
 
-    device = FreenoveDevice(Control())
+    return Control()
+
+
+def load_device(server_dir: Path):
+    device = FreenoveDevice(server_dir=server_dir)
+    device.attach_control(load_control(server_dir))
     device.connect()
     return device
 
@@ -168,37 +421,32 @@ class Handler(socketserver.StreamRequestHandler):
                 if method == "ping":
                     result = {"pong": True, "protocol_version": BRIDGE_PROTOCOL_VERSION}
                 elif method == "shutdown":
-                    if self.server.device is not None:
+                    if self.server.device.hardware_initialized:
                         self.server.device.servopower(False)
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
                     result = {"shutting_down": True}
                 elif method == "status":
-                    if self.server.device is None:
-                        result = {
-                            "bridge_ready": True,
-                            "hardware_initialized": False,
-                            "moving": False,
-                            "servo_power": False,
-                        }
-                    else:
-                        result = self.server.device.status()
-                        result["bridge_ready"] = True
+                    result = self.server.device.status()
                     result["socket"] = self.server.server_address
                 elif method == "servopower" and not bool(
                     kwargs.get("on", args[0] if args else True)
                 ):
-                    if self.server.device is not None:
+                    if self.server.device.hardware_initialized:
                         self.server.device.servopower(False)
                     result = None
                 else:
-                    if self.server.device is None:
-                        if method not in {"servopower", "stand"}:
+                    peripheral_methods = {
+                        "buzzer_off", "buzzer_on", "camera_capture", "capabilities",
+                        "led_color", "led_mode", "power", "sonic",
+                    }
+                    if not self.server.device.hardware_initialized and method not in peripheral_methods:
+                        if method not in {"connect", "servopower", "stand"}:
                             raise RuntimeError(
                                 "Hardware is not initialized. After checking the movement area, call stand or servopower true."
                             )
                         with self.server.device_lock:
-                            if self.server.device is None:
-                                self.server.device = load_device(self.server.server_dir)
+                            if not self.server.device.hardware_initialized:
+                                self.server.device.attach_control(load_control(self.server.server_dir))
                     target = getattr(self.server.device, method)
                     if method.startswith("_") or not callable(target):
                         raise AttributeError(method)
@@ -217,13 +465,13 @@ def main():
     if os.path.exists(args.socket):
         os.unlink(args.socket)
     with socketserver.ThreadingUnixStreamServer(args.socket, Handler) as server:
-        server.device = None
+        server.device = FreenoveDevice(server_dir=args.server_dir)
         server.device_lock = threading.Lock()
         server.server_dir = args.server_dir
         try:
             server.serve_forever()
         finally:
-            if server.device is not None:
+            if server.device.hardware_initialized:
                 server.device.stop()
                 server.device.servopower(False)
 

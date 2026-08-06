@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 3
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 4
 
 
 class FakeThread:
@@ -40,6 +40,19 @@ class FakeControl:
         self.servo = FakeServo()
         self.command_queue = []
         self.timeout = 0
+
+
+def test_bridge_preserves_the_legacy_hexapod_api_surface():
+    expected = {
+        "connect", "disconnect", "servopower", "speed", "move", "stop",
+        "balance", "position", "attitude", "head_vertical", "head_horizontal",
+        "buzzer_on", "buzzer_off", "led_mode", "led_color", "camera_capture",
+        "sonic", "power", "ball_start", "ball_stop", "ball_state",
+        "set_leg_position", "set_leg_positions", "set_leg_servo_angles",
+        "set_leg_servo_angles_all", "set_leg_joint_angles",
+        "set_leg_joint_angles_all",
+    }
+    assert expected <= set(MODULE.FreenoveDevice(FakeControl()).capabilities())
 
 
 def test_move_is_translated_to_freenove_command_queue():

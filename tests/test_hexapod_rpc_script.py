@@ -28,6 +28,13 @@ def make_fake_server(path, marker):
         "        self.command_queue = []\n"
         "        self.timeout = 0\n"
     )
+    (path / "camera.py").write_text(
+        "class Camera:\n"
+        "    def __init__(self): self.streaming = False\n"
+        "    def start_stream(self): self.streaming = True\n"
+        "    def get_frame(self): return b'fake-jpeg-data'\n"
+        "    def stop_stream(self): self.streaming = False\n"
+    )
 
 
 def rpc_call(path, method, *args):
@@ -62,7 +69,11 @@ def test_rpc_script_waits_for_a_real_health_response(tmp_path):
         assert before_power["result"]["bridge_ready"] is True
         assert before_power["result"]["hardware_initialized"] is False
         ping = rpc_call(env["HEXAPOD_RPC_SOCKET"], "ping")
-        assert ping["result"]["protocol_version"] == 3
+        assert ping["result"]["protocol_version"] == 4
+        captured = rpc_call(env["HEXAPOD_RPC_SOCKET"], "camera_capture", "view.jpg")
+        assert captured["ok"] is True
+        assert Path(captured["result"]).read_bytes() == b"fake-jpeg-data"
+        assert not marker.exists(), "camera use must not initialize the servos"
         rejected = rpc_call(env["HEXAPOD_RPC_SOCKET"], "move", 1, 5, 0, 0)
         assert rejected["ok"] is False
         assert not marker.exists()

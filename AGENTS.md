@@ -78,6 +78,9 @@
 - If a command fails or times out, do not blindly repeat it: first assume the previous command may have partially executed, stop motion when safe, and inspect status.
 - Use the direction-name API `.venv/bin/acamp-robot call walk DIRECTION DURATION` for participant requests to move forward, backward, left, or right. Valid English direction values are `forward`, `backward`, `left`, and `right`.
 - Never infer or guess vendor coordinates from natural-language directions. Freenove uses positive `y` for forward and positive `x` for right, but this mapping belongs inside `walk`, not in agent-generated command arguments.
+- Treat questions such as "What can you see?" or their Japanese equivalents as camera requests, not status requests. Run `.venv/bin/acamp-robot call camera_capture view.jpg`, read the returned image path, and inspect that actual image with an image-capable tool before answering. Never infer visual content from robot status.
+- Hexapod camera capture is available while `hardware_initialized` is false and must not initialize or enable the servos. Do not refuse a visual request merely because the motion hardware is uninitialized.
+- If capture fails, state the concrete camera error. Do not claim that no visual capability exists until `camera_capture` itself has failed.
 - Use low-level `timed_move` only for tested code that genuinely needs explicit coordinates. Never use separate `move`, sleep, and `stop` calls for a requested short movement.
 - If the RPC bridge disconnects during motion, use the physical power switch or the documented emergency-stop procedure in `CAMP.md`; do not rely only on another RPC command.
 - Never claim that the robot moved successfully without an observable result or a successful hardware response.

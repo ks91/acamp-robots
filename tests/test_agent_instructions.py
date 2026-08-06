@@ -41,6 +41,14 @@ def test_agents_documents_both_hardware_control_paths():
     assert "Never infer or guess vendor coordinates" in agents
 
 
+def test_agents_uses_a_real_camera_frame_for_visual_questions():
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert ".venv/bin/acamp-robot call camera_capture view.jpg" in agents
+    assert "inspect that actual image" in agents
+    assert "Never infer visual content from robot status" in agents
+    assert "available while `hardware_initialized` is false" in agents
+
+
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "under `skills/`" in agents

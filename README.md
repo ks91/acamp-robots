@@ -115,16 +115,26 @@ DOFBOT example:
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod example (`stand`, `walk`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
+Hexapod example:
 
 ```python
 robot.call("stand")
 robot.call("stop")
 # Walk forward for one second. Named directions avoid vendor-coordinate mistakes.
 robot.call("walk", "forward", 1.0)
+# Capture a frame without initializing or enabling the servos.
+image_path = robot.call("camera_capture", "view.jpg")
 ```
 
 Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move` method remains available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
+
+The bridge also exposes the capabilities from the previous `multimodal-hexapod-rpc.py` environment: buzzer and LED control, camera capture, ultrasonic distance, battery voltage, red-ball tracking, posture and head control, and per-leg position, servo-angle, and joint-angle control. Query `capabilities` for the authoritative method list:
+
+```bash
+.venv/bin/acamp-robot call capabilities
+```
+
+When a participant asks what the robot can see, the agent should call `camera_capture`, inspect the returned image file, and answer from the image. A status response contains no visual information. Camera capture deliberately works before servo initialization.
 
 The command-line interface provides the same basic access:
 
