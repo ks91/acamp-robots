@@ -79,7 +79,15 @@ The script prepares the selected robot and then starts `loglm -X`.
 - DOFBOT: stops all running Docker containers to release the camera. The operation is idempotent and therefore reliably runs during the first session after every boot.
 - Hexapod: starts the local Unix-socket RPC bridge if it is not already running.
 
-Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. A status containing `bridge_ready: true` and `hardware_initialized: false` is therefore normal. After checking the movement area, use `stand` to initialize the hardware, enable servo power, and request the neutral standing posture. Other movement commands are rejected until initialization succeeds.
+`start-agent.sh` also exports `ACAMP_PHYSICAL_ROBOT_READY=1`. This represents a session-level safety handoff: staff clear and supervise the robot area before participants begin, and the coding agent executes routine bounded movement requests without repeatedly asking children to confirm safety. Calibration, disabled limits, unbounded walking, high-speed movement, and other out-of-policy operations remain unavailable rather than becoming confirmation prompts.
+
+For development or diagnostic sessions that must not receive this standing authorization, use:
+
+```bash
+ACAMP_PHYSICAL_ROBOT_READY=0 ./scripts/start-agent.sh
+```
+
+Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. A status containing `bridge_ready: true` and `hardware_initialized: false` is therefore normal. In a prepared physical session, use `stand` to initialize the hardware, enable servo power, and request the neutral standing posture. Other movement commands are rejected until initialization succeeds.
 
 On Raspberry Pi systems with an available user systemd manager, the bridge runs as a transient user service. This keeps it alive after an SSH or coding-agent shell command finishes. The script falls back to `nohup` on development systems without user systemd. After pulling bridge changes, run `./scripts/hexapod-rpc.sh start`; an incompatible older bridge is detected and replaced automatically.
 

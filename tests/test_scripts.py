@@ -30,3 +30,26 @@ def test_arm_preparation_stops_camera_container(tmp_path):
 def test_hexapod_preparation_starts_rpc(tmp_path):
     assert run_prepare(tmp_path, "hexapod") == "start"
 
+
+def test_start_agent_marks_physical_session_as_ready():
+    import tempfile
+
+    with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        root = Path(directory)
+        (root / "scripts").mkdir()
+        start = root / "scripts" / "start-agent.sh"
+        start.write_text((ROOT / "scripts" / "start-agent.sh").read_text())
+        prepare = root / "scripts" / "prepare-session.sh"
+        prepare.write_text("#!/bin/sh\nexit 0\n")
+        fake_loglm = root / "fake-loglm"
+        fake_loglm.write_text("#!/bin/sh\nprintf '%s\\n' \"$ACAMP_PHYSICAL_ROBOT_READY\"\n")
+        for executable in (start, prepare, fake_loglm):
+            executable.chmod(0o755)
+        result = subprocess.run(
+            [start],
+            env=os.environ | {"LOGLM_BIN": str(fake_loglm)},
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert result.stdout.strip() == "1"

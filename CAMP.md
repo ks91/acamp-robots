@@ -26,6 +26,8 @@ Update this file before each camp. Keep durable robot-operation rules in `AGENTS
 ## Robot behavior
 
 - Active robot for this camp: use the device selected in `.acamp-robot.json`.
+- In a session with `ACAMP_PHYSICAL_ROBOT_READY=1`, do not ask participants for repeated safety confirmation before routine bounded movements they request. Staff complete the physical safety check before the session.
+- A participant-requested movement is not an autonomous reaction. Execute supported routine requests directly; apply the separate autonomous-reaction policy below only to movement the robot initiates without a participant request.
 - Allowed autonomous reactions: TBD
 - Movements or features that must not be used: TBD
 - Emergency-stop procedure and responsible staff member: TBD

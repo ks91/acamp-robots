@@ -17,6 +17,16 @@ def test_agents_distinguishes_development_from_physical_operation():
     assert "Do not move a physical robot" in agents
 
 
+def test_prepared_sessions_do_not_ask_children_for_safety_confirmation():
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    camp = (ROOT / "CAMP.md").read_text(encoding="utf-8")
+    assert "ACAMP_PHYSICAL_ROBOT_READY=1" in agents
+    assert "without asking for confirmation" in agents
+    assert 'Do not ask questions such as "Is the area safe?"' in agents
+    assert "staff complete the physical safety check" in camp.lower()
+    assert "do not ask participants for repeated safety confirmation" in camp.lower()
+
+
 def test_agents_documents_both_hardware_control_paths():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "hardware/Arm_Lib.py" in agents

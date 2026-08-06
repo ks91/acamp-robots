@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$ROOT_DIR/scripts/prepare-session.sh"
 cd "$ROOT_DIR"
+export ACAMP_PHYSICAL_ROBOT_READY="${ACAMP_PHYSICAL_ROBOT_READY:-1}"
 
 if [[ -n "${LOGLM_BIN:-}" ]]; then
   exec "$LOGLM_BIN" -X "$@"
