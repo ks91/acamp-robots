@@ -59,12 +59,14 @@ def test_rpc_script_waits_for_a_real_health_response(tmp_path):
         assert status.returncode == 0
         assert "is running" in status.stdout
         before_power = rpc_call(env["HEXAPOD_RPC_SOCKET"], "status")
-        assert before_power["result"]["initialized"] is False
+        assert before_power["result"]["bridge_ready"] is True
+        assert before_power["result"]["hardware_initialized"] is False
         rejected = rpc_call(env["HEXAPOD_RPC_SOCKET"], "move", 1, 5, 0, 0)
         assert rejected["ok"] is False
         assert not marker.exists()
-        enabled = rpc_call(env["HEXAPOD_RPC_SOCKET"], "servopower", True)
-        assert enabled["ok"] is True
+        stood = rpc_call(env["HEXAPOD_RPC_SOCKET"], "stand")
+        assert stood["ok"] is True
+        assert stood["result"] == {"accepted": True, "posture": "stand"}
         assert marker.read_text() == "initialized"
     finally:
         subprocess.run([script, "stop"], env=env, check=False)

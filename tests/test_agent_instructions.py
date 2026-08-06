@@ -23,6 +23,9 @@ def test_agents_documents_both_hardware_control_paths():
     assert "scripts/stop-camera-containers.sh" in agents
     assert "scripts/hexapod-rpc.sh start" in agents
     assert "Unix-socket RPC bridge" in agents
+    assert "`hardware_initialized: false` is the normal safe state" in agents
+    assert ".venv/bin/acamp-robot call stand" in agents
+    assert "Use `timed_move`" in agents
 
 
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():

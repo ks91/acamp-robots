@@ -54,6 +54,16 @@ def test_head_angle_is_limited_to_servo_range():
     assert control.servo.last == (0, 180)
 
 
+def test_stand_enables_power_and_requests_neutral_posture():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.stand()
+    assert result == {"accepted": True, "posture": "stand"}
+    assert control.servo_power_disable.value == "off"
+    assert control.command_queue == ["CMD_POSITION", "0", "0", "0"]
+    assert robot.status()["servo_power"] is True
+
+
 def test_timed_move_stops_on_the_server_side():
     control = FakeControl()
     robot = MODULE.FreenoveDevice(control)

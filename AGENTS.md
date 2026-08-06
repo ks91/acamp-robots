@@ -54,6 +54,9 @@
 - Before the first DOFBOT session after a boot, run `scripts/stop-camera-containers.sh` to release the camera. `scripts/start-agent.sh` performs this preparation automatically.
 - Freenove Hexapod (`hexapod`) is controlled through the local Unix-socket RPC bridge because its hardware libraries belong to the system Python environment. Do not import those hardware libraries into the project virtual environment.
 - Before a Hexapod session, start the bridge with `scripts/hexapod-rpc.sh start`. `scripts/start-agent.sh` performs this preparation automatically.
+- A Hexapod status of `bridge_ready: true` and `hardware_initialized: false` is the normal safe state before servo activation. It does not mean that vendor files or the robot are missing.
+- After the user confirms the movement area is safe, a request to stand should be executed directly with `.venv/bin/acamp-robot call stand`. The `stand` command performs the required first hardware initialization, enables servo power, and requests the neutral standing posture.
+- Do not inspect vendor source code or refuse merely because `hardware_initialized` is false when the user has confirmed safety and requested `stand` or servo power.
 - Vendor Freenove Server files belong under `hardware/freenove/Code/Server` by default, or at the path supplied through `HEXAPOD_SERVER_DIR`. Do not commit them to this repository.
 - Prefer the public Python API in `src/acamp_robots` or the `acamp-robot` CLI over direct vendor-library calls.
 
@@ -65,6 +68,7 @@
 - Do not initiate walking, large arm sweeps, high-speed motion, repeated autonomous reactions, or servo calibration unless the user explicitly requests it and the physical area is confirmed safe.
 - Never disable or bypass angle, speed, workspace, timeout, or emergency-stop limits for convenience.
 - If a command fails or times out, do not blindly repeat it: first assume the previous command may have partially executed, stop motion when safe, and inspect status.
+- Use `timed_move` instead of separate `move`, sleep, and `stop` calls for requested short walking movements. The bridge limits timed movement to five seconds and schedules the stop server-side.
 - If the RPC bridge disconnects during motion, use the physical power switch or the documented emergency-stop procedure in `CAMP.md`; do not rely only on another RPC command.
 - Never claim that the robot moved successfully without an observable result or a successful hardware response.
 

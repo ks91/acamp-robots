@@ -3,14 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROBOT=""
+HEXAPOD_SERVER_DIR="hardware/freenove/Code/Server"
 
 usage() {
-  echo "Usage: ./scripts/setup.sh --robot arm|hexapod"
+  echo "Usage: ./scripts/setup.sh --robot arm|hexapod [--hexapod-server-dir PATH]"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --robot) ROBOT="${2:-}"; shift 2 ;;
+    --hexapod-server-dir) HEXAPOD_SERVER_DIR="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -21,7 +23,7 @@ if [[ "$ROBOT" != "arm" && "$ROBOT" != "hexapod" ]]; then
   exit 2
 fi
 
-python3 - "$ROOT_DIR" "$ROBOT" <<'PY'
+python3 - "$ROOT_DIR" "$ROBOT" "$HEXAPOD_SERVER_DIR" <<'PY'
 import sys
 from pathlib import Path
 
@@ -29,7 +31,7 @@ root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "src"))
 from acamp_robots.config import RobotConfig, save_config
 
-path = save_config(RobotConfig(robot=sys.argv[2]), root)
+path = save_config(RobotConfig(robot=sys.argv[2], hexapod_server_dir=sys.argv[3]), root)
 print(f"Wrote configuration: {path}")
 PY
 

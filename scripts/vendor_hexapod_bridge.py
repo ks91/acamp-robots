@@ -37,6 +37,13 @@ class FreenoveDevice:
                 self.control.servo_power_disable.on()
             self._servo_power = bool(on)
 
+    def stand(self):
+        """Enable servo power and request the vendor neutral standing posture."""
+        with self._lock:
+            self.servopower(True)
+            self.position(0, 0, 0)
+        return {"accepted": True, "posture": "stand"}
+
     def speed(self, tempo=8):
         with self._lock:
             self.move_speed = max(1, min(int(tempo), 20))
@@ -98,7 +105,8 @@ class FreenoveDevice:
 
     def status(self):
         return {
-            "connected": self.control.condition_thread.is_alive(),
+            "hardware_initialized": True,
+            "control_thread_alive": self.control.condition_thread.is_alive(),
             "moving": self._moving,
             "servo_power": self._servo_power,
             "speed": self.move_speed,
@@ -139,14 +147,14 @@ class Handler(socketserver.StreamRequestHandler):
                 elif method == "status":
                     if self.server.device is None:
                         result = {
-                            "connected": False,
-                            "initialized": False,
+                            "bridge_ready": True,
+                            "hardware_initialized": False,
                             "moving": False,
                             "servo_power": False,
                         }
                     else:
                         result = self.server.device.status()
-                        result["initialized"] = True
+                        result["bridge_ready"] = True
                     result["socket"] = self.server.server_address
                 elif method == "servopower" and not bool(
                     kwargs.get("on", args[0] if args else True)
@@ -156,9 +164,9 @@ class Handler(socketserver.StreamRequestHandler):
                     result = None
                 else:
                     if self.server.device is None:
-                        if method != "servopower":
+                        if method not in {"servopower", "stand"}:
                             raise RuntimeError(
-                                "Hardware is not initialized. Call servopower true after checking the movement area."
+                                "Hardware is not initialized. After checking the movement area, call stand or servopower true."
                             )
                         with self.server.device_lock:
                             if self.server.device is None:

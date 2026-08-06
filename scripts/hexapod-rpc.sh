@@ -6,8 +6,23 @@ ACTION="${1:-start}"
 SOCKET="${HEXAPOD_RPC_SOCKET:-/tmp/acamp-hexapod.sock}"
 PID_FILE="${HEXAPOD_RPC_PID_FILE:-/tmp/acamp-hexapod-rpc.pid}"
 LOG_FILE="${HEXAPOD_RPC_LOG:-/tmp/acamp-hexapod-rpc.log}"
-SERVER_DIR="${HEXAPOD_SERVER_DIR:-$ROOT_DIR/hardware/freenove/Code/Server}"
 BRIDGE="$ROOT_DIR/scripts/vendor_hexapod_bridge.py"
+
+if [[ -n "${HEXAPOD_SERVER_DIR:-}" ]]; then
+  SERVER_DIR="$HEXAPOD_SERVER_DIR"
+else
+  SERVER_DIR="$(python3 - "$ROOT_DIR/.acamp-robot.json" <<'PY'
+import json
+import sys
+
+try:
+    print(json.load(open(sys.argv[1], encoding="utf-8")).get("hexapod_server_dir", "hardware/freenove/Code/Server"))
+except (FileNotFoundError, ValueError):
+    print("hardware/freenove/Code/Server")
+PY
+)"
+  [[ "$SERVER_DIR" = /* ]] || SERVER_DIR="$ROOT_DIR/$SERVER_DIR"
+fi
 
 read_pid() { [[ -f "$PID_FILE" ]] && tr -d '\n' < "$PID_FILE"; }
 

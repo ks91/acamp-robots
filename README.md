@@ -19,6 +19,13 @@ cd acamp-robots
 ./scripts/setup.sh --robot hexapod  # Freenove
 ```
 
+If the Freenove Server is already installed elsewhere on the Raspberry Pi, save that absolute path in the device configuration:
+
+```bash
+./scripts/setup.sh --robot hexapod \
+  --hexapod-server-dir "$HOME/Freenove_Hexapod/Code/Server"
+```
+
 The selection is stored in `.acamp-robot.json`. This is a device-specific file and is not tracked by Git. Run the setup command again to change the robot type.
 
 ## Camp-specific agent instructions
@@ -72,7 +79,7 @@ The script prepares the selected robot and then starts `loglm -X`.
 - DOFBOT: stops all running Docker containers to release the camera. The operation is idempotent and therefore reliably runs during the first session after every boot.
 - Hexapod: starts the local Unix-socket RPC bridge if it is not already running.
 
-Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. After checking the movement area, explicitly call `servopower true` before any movement command. Other hardware commands are rejected until that step succeeds.
+Starting the Hexapod bridge does not initialize the vendor hardware or enable servo power. A status containing `bridge_ready: true` and `hardware_initialized: false` is therefore normal. After checking the movement area, use `stand` to initialize the hardware, enable servo power, and request the neutral standing posture. Other movement commands are rejected until initialization succeeds.
 
 The `-X` option suppresses individual execution-approval prompts. This prioritizes a smooth participant experience, but it also gives the coding agent broad authority. Do not store secrets or unnecessary credentials on the Raspberry Pi. Clear the area around the robot and ensure that an adult can cut its power immediately.
 
@@ -98,9 +105,10 @@ DOFBOT example:
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod example (`move`, `timed_move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
+Hexapod example (`stand`, `move`, `timed_move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
 
 ```python
+robot.call("stand")
 robot.call("stop")
 # Move for one second; the bridge guarantees the stop even if the client disconnects.
 robot.call("timed_move", 1.0, 1, 5, 0, 0)
