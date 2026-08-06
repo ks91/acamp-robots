@@ -115,14 +115,16 @@ DOFBOT example:
 robot.move_joints([90, 90, 90, 90, 90, 30], duration_ms=1000)
 ```
 
-Hexapod example (`stand`, `move`, `timed_move`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
+Hexapod example (`stand`, `walk`, `stop`, `speed`, `balance`, `position`, `attitude`, `head_vertical`, `head_horizontal`, and `servopower` are available over RPC):
 
 ```python
 robot.call("stand")
 robot.call("stop")
-# Move for one second; the bridge guarantees the stop even if the client disconnects.
-robot.call("timed_move", 1.0, 1, 5, 0, 0)
+# Walk forward for one second. Named directions avoid vendor-coordinate mistakes.
+robot.call("walk", "forward", 1.0)
 ```
+
+Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move` method remains available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
 
 The command-line interface provides the same basic access:
 

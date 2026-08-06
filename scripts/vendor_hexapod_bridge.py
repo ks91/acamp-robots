@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 2
+BRIDGE_PROTOCOL_VERSION = 3
 
 
 class FreenoveDevice:
@@ -84,6 +84,32 @@ class FreenoveDevice:
             self._stop_timer.daemon = True
             self._stop_timer.start()
         return {"accepted": True, "stop_after_seconds": duration}
+
+    def walk(self, direction, duration=1.0, step=5, gait=1):
+        """Walk briefly using human-readable directions, not vendor coordinates."""
+        direction = str(direction).lower()
+        vectors = {
+            "forward": (0, 1),
+            "backward": (0, -1),
+            "left": (-1, 0),
+            "right": (1, 0),
+        }
+        if direction not in vectors:
+            raise ValueError("direction must be forward, backward, left, or right")
+        step = int(step)
+        if not 1 <= step <= 10:
+            raise ValueError("step must be between 1 and 10")
+        x_sign, y_sign = vectors[direction]
+        result = self.timed_move(
+            duration,
+            gait=int(gait),
+            x=x_sign * step,
+            y=y_sign * step,
+            angle=0,
+        )
+        result["direction"] = direction
+        result["step"] = step
+        return result
 
     def balance(self, on=False):
         with self._lock:

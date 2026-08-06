@@ -35,7 +35,10 @@ def test_agents_documents_both_hardware_control_paths():
     assert "Unix-socket RPC bridge" in agents
     assert "`hardware_initialized: false` is the normal safe state" in agents
     assert ".venv/bin/acamp-robot call stand" in agents
-    assert "Use `timed_move`" in agents
+    assert "Use the direction-name API" in agents
+    assert "positive `y` for forward" in agents
+    assert "positive `x` for right" in agents
+    assert "Never infer or guess vendor coordinates" in agents
 
 
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():

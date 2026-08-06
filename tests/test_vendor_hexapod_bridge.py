@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 2
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 3
 
 
 class FakeThread:
@@ -85,6 +85,41 @@ def test_timed_move_rejects_long_or_non_positive_duration():
         robot.timed_move(0)
     with pytest.raises(ValueError):
         robot.timed_move(5.1)
+
+
+@pytest.mark.parametrize(
+    ("direction", "expected_x", "expected_y"),
+    [
+        ("forward", "0", "5"),
+        ("backward", "0", "-5"),
+        ("left", "-5", "0"),
+        ("right", "5", "0"),
+    ],
+)
+def test_walk_translates_named_directions_to_vendor_coordinates(
+    direction, expected_x, expected_y
+):
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.walk(direction, duration=1, step=5)
+    robot._cancel_stop_timer()
+    assert control.command_queue == [
+        "CMD_MOVE",
+        "1",
+        expected_x,
+        expected_y,
+        "8",
+        "0",
+    ]
+    assert result["direction"] == direction
+
+
+def test_walk_rejects_unknown_directions_and_large_steps():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    with pytest.raises(ValueError):
+        robot.walk("diagonal")
+    with pytest.raises(ValueError):
+        robot.walk("forward", step=11)
 
 
 def test_load_device_changes_to_vendor_directory(monkeypatch, tmp_path):
