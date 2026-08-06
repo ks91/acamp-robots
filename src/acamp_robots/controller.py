@@ -21,6 +21,8 @@ class ArmController:
     JOINT_LIMITS = ((0, 180), (0, 180), (0, 180), (0, 180), (0, 270), (0, 180))
     HOME = [90, 90, 90, 90, 90, 180]
     PRESETS = {
+        "camera_forward": [90, 65, 115, 110, 90, 120],
+        "camera_work_area": [90, 120, 0, 0, 90, 30],
         "color_view": [90, 120, 0, 0, 90, 30],
         "color_grab": [90, 43, 36, 40, 90, 30],
         "color_lift": [90, 80, 35, 40, 90, 135],
@@ -35,6 +37,22 @@ class ArmController:
         "garbage_recyclable": [27, 110, 0, 40, 265, 135],
         "garbage_kitchen": [152, 110, 0, 40, 265, 135],
         "garbage_other": [137, 80, 35, 40, 265, 135],
+    }
+    POSE_DESCRIPTIONS = {
+        "camera_forward": (
+            "A gentle forward-facing pose from the legacy face-forward behavior; "
+            "use it when the participant asks the arm or camera to face ahead."
+        ),
+        "camera_work_area": (
+            "The legacy camera pose for looking down toward the board and inspecting "
+            "colored objects; it is also the initial red-ball tracking pose."
+        ),
+        "color_view": "Alias of camera_work_area used for color sorting.",
+        "color_grab": "Open-gripper pose above the color-sorting pickup point.",
+        "color_lift": "Lifted pose holding a color-sorting object.",
+        "garbage_view": "Camera pose for inspecting an item in the garbage-sorting area.",
+        "garbage_grab": "Open-gripper pose at the garbage-sorting pickup point.",
+        "garbage_lift": "Lifted pose holding a garbage-sorting item.",
     }
     GRIP_WIDTHS = {
         0.0: 180, 0.5: 176, 1.0: 168, 1.5: 160, 2.0: 152, 2.5: 143,
@@ -67,7 +85,7 @@ class ArmController:
     def capabilities(self) -> list[str]:
         return sorted(
             ("buzzer_off", "buzzer_on", "camera_capture", "capabilities", "grip_object",
-             "home", "led_color", "move_joint", "move_joints", "move_preset", "read_joint",
+             "home", "led_color", "move_joint", "move_joints", "move_preset", "pose_info", "read_joint",
              "rest", "status", "stop", "target_step", "tool_position", "torque")
         )
 
@@ -227,6 +245,18 @@ class ArmController:
         except KeyError as exc:
             raise ValueError(f"unknown arm preset: {name}") from exc
         return self.move_joints(joints, duration_ms)
+
+    def pose_info(self, name: str) -> dict[str, Any]:
+        try:
+            joints = self.PRESETS[str(name)]
+        except KeyError as exc:
+            raise ValueError(f"unknown arm preset: {name}") from exc
+        return {
+            "name": str(name),
+            "joints": list(joints),
+            "description": self.POSE_DESCRIPTIONS.get(str(name), "A legacy task pose."),
+            "tool": self.tool_position(joints),
+        }
 
     def target_step(self, section: int | str, duration_ms: int = 300) -> dict[str, Any]:
         """Move the base one bounded step toward an 11-section visual target."""

@@ -67,6 +67,10 @@ def test_agents_documents_arm_body_and_natural_language_controls():
     assert "On DOFBOT, both an emergency stop and `rest` disable servo torque" in agents
     assert "`[90, 90, 90, 90, 90, 180]`" in agents
     assert "gripper is closed" in agents
+    assert "`camera_forward` is `[90, 65, 115, 110, 90, 120]`" in agents
+    assert "`camera_work_area` is `[90, 120, 0, 0, 90, 30]`" in agents
+    assert "Joint 1 determines horizontal direction" in agents
+    assert ".venv/bin/acamp-robot call pose_info POSE_NAME" in agents
 
 
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():

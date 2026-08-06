@@ -34,7 +34,7 @@ def test_arm_exposes_the_expected_public_capabilities(arm):
         "status", "capabilities", "move_joint", "read_joint", "move_joints",
         "home", "stop", "rest", "torque", "led_color", "buzzer_on",
         "buzzer_off", "camera_capture", "grip_object", "tool_position",
-        "move_preset", "target_step",
+        "move_preset", "pose_info", "target_step",
     }
     assert expected <= set(arm.capabilities())
 
@@ -132,6 +132,15 @@ def test_known_preset_is_named_and_unknown_presets_are_rejected(arm):
     assert arm.device.calls[-1][1] == [90, 120, 0, 0, 90, 30]
     with pytest.raises(ValueError):
         arm.move_preset("invented")
+
+
+def test_camera_facing_and_work_area_poses_are_not_conflated(arm):
+    forward = arm.pose_info("camera_forward")
+    work_area = arm.pose_info("camera_work_area")
+    assert forward["joints"] == [90, 65, 115, 110, 90, 120]
+    assert work_area["joints"] == [90, 120, 0, 0, 90, 30]
+    assert "face ahead" in forward["description"]
+    assert "looking down toward the board" in work_area["description"]
 
 
 def test_target_step_uses_the_legacy_eleven_section_direction(arm):
