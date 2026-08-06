@@ -110,6 +110,10 @@ The command-line interface provides the same basic access:
 .venv/bin/acamp-robot call stop
 ```
 
+## Robot skills
+
+Reusable participant-created behaviors belong in [`skills/`](skills/), with one directory per behavior. These robot skills should use the public `acamp_robots` API and include an offline test where practical. They are separate from Codex skills and must not be installed into `~/.codex/skills`.
+
 ## Development and testing
 
 No physical robot is required:
