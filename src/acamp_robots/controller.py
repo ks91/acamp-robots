@@ -19,7 +19,7 @@ class ArmController:
     """Loads the vendor-provided Arm_Lib.py without redistributing it."""
 
     JOINT_LIMITS = ((0, 180), (0, 180), (0, 180), (0, 180), (0, 270), (0, 180))
-    HOME = [90, 90, 90, 90, 90, 30]
+    HOME = [90, 90, 90, 90, 90, 180]
     PRESETS = {
         "color_view": [90, 120, 0, 0, 90, 30],
         "color_grab": [90, 43, 36, 40, 90, 30],

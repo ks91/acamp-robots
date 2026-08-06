@@ -120,6 +120,8 @@ robot.grip_object(3.0)
 robot.rest()  # Disable servo torque.
 ```
 
+`home` moves to `[90, 90, 90, 90, 90, 180]`, with the arm upright and the gripper closed.
+
 DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer control, measured object-width-to-gripper-angle conversion, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, and five-degree visual-centering corrections through `target_step`. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
 
 Hexapod example:

@@ -65,6 +65,8 @@ def test_agents_documents_arm_body_and_natural_language_controls():
     assert "wrist rotation accepts 0–270 degrees" in agents
     assert "`grip_object WIDTH_CM`" in agents
     assert "On DOFBOT, both an emergency stop and `rest` disable servo torque" in agents
+    assert "`[90, 90, 90, 90, 90, 180]`" in agents
+    assert "gripper is closed" in agents
 
 
 def test_agents_keeps_robot_skills_and_sensitive_files_scoped():

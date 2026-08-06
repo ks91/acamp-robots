@@ -55,7 +55,7 @@ def test_single_and_all_joint_control_are_bounded(arm):
 
 def test_rest_disables_torque_and_home_uses_neutral_pose(arm):
     assert arm.home() == 1
-    assert arm.device.calls[-1] == ("move_all", [90, 90, 90, 90, 90, 30], 1000)
+    assert arm.device.calls[-1] == ("move_all", [90, 90, 90, 90, 90, 180], 1000)
     assert arm.rest() == 0
     assert arm.device.calls[-1] == ("torque", 0)
 
