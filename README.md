@@ -165,11 +165,11 @@ robot.rest()  # Disable servo torque.
 
 `home` moves to `[90, 90, 90, 90, 90, 180]`, with the arm upright and the gripper closed.
 
-DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer control, measured object-width-to-gripper-angle conversion, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, and five-degree visual-centering corrections through `target_step`. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
+DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer control, measured 0–6.4 cm object-width-to-gripper-angle conversion, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, parameterized Hexapod box-transfer poses through `hexapod_pose`, and five-degree visual-centering corrections through `target_step`. Every movement explicitly enables torque first, so a new CLI command works after a previous `rest` call. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
 
 The wrist camera moves with the arm. Two viewing poses are intentionally distinct:
 
-- `camera_forward` (`[90, 60, 60, 60, 90, 120]`) faces ahead with horizontal end-effector elevation.
+- `camera_forward` (`[90, 65, 115, 110, 90, 119]`) is the empirically adjusted physical forward-camera pose.
 - `camera_work_area` (`[90, 120, 0, 0, 90, 30]`) looks down toward the board for color inspection and tracking.
 
 Use `pose_info NAME` to inspect a pose's joints, purpose, and calculated tool position before moving. After changing the camera pose, capture a fresh image to verify the real view.

@@ -60,6 +60,20 @@ def test_rest_disables_torque_and_home_uses_neutral_pose(arm):
     assert arm.device.calls[-1] == ("torque", 0)
 
 
+def test_motion_reenables_torque_after_rest(arm):
+    arm.rest()
+    arm.home()
+    assert arm.device.calls[-2:] == [
+        ("torque", 1),
+        ("move_all", [90, 90, 90, 90, 90, 180], 1000),
+    ]
+
+
+def test_fresh_controller_always_enables_torque_before_motion(arm):
+    arm.home()
+    assert arm.device.calls[-2][0:2] == ("torque", 1)
+
+
 def test_led_and_buzzer_calls_are_bounded(arm):
     arm.led_color(20, 30, 50)
     arm.buzzer_on(5)
@@ -77,6 +91,7 @@ def test_grip_width_uses_the_legacy_measured_lookup_table(arm):
     result = arm.grip_object(3.0, 500)
     assert result == {"width_cm": 3.0, "gripper_angle": 134}
     assert arm.device.calls[-1] == ("move_one", 6, 134, 500)
+    assert arm.grip_object(6.4)["gripper_angle"] == 0
     with pytest.raises(ValueError):
         arm.grip_object(6.5)
 
@@ -137,11 +152,20 @@ def test_known_preset_is_named_and_unknown_presets_are_rejected(arm):
 def test_camera_facing_and_work_area_poses_are_not_conflated(arm):
     forward = arm.pose_info("camera_forward")
     work_area = arm.pose_info("camera_work_area")
-    assert forward["joints"] == [90, 60, 60, 60, 90, 120]
-    assert forward["tool"]["elevation_deg"] == 0
+    assert forward["joints"] == [90, 65, 115, 110, 90, 119]
     assert work_area["joints"] == [90, 120, 0, 0, 90, 30]
     assert "face ahead" in forward["description"]
     assert "looking down toward the board" in work_area["description"]
+
+
+def test_hexapod_transfer_poses_preserve_requested_base_and_grip(arm):
+    result = arm.hexapod_pose("look", base_angle=105, gripper_angle=180)
+    assert result["joints"] == [105, 100, 15, 20, 90, 180]
+    assert arm.device.calls[-1] == (
+        "move_all", [105, 100, 15, 20, 90, 180], 1000
+    )
+    result = arm.hexapod_pose("grab", base_angle=75)
+    assert result["joints"] == [75, 65, 30, 55, 265, 30]
 
 
 def test_target_step_uses_the_legacy_eleven_section_direction(arm):

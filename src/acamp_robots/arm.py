@@ -16,7 +16,7 @@ class ArmController:
     JOINT_LIMITS = ((0, 180), (0, 180), (0, 180), (0, 180), (0, 270), (0, 180))
     HOME = [90, 90, 90, 90, 90, 180]
     PRESETS = {
-        "camera_forward": [90, 60, 60, 60, 90, 120],
+        "camera_forward": [90, 65, 115, 110, 90, 119],
         "camera_work_area": [90, 120, 0, 0, 90, 30],
         "color_view": [90, 120, 0, 0, 90, 30],
         "color_grab": [90, 43, 36, 40, 90, 30],
@@ -35,8 +35,8 @@ class ArmController:
     }
     POSE_DESCRIPTIONS = {
         "camera_forward": (
-            "A forward-facing pose with horizontal end-effector elevation from the "
-            "legacy drawing behaviors; use it when the arm or camera should face ahead."
+            "The empirically adjusted forward-facing camera pose from the legacy "
+            "robot; use it when the arm or camera should face ahead."
         ),
         "camera_work_area": (
             "The legacy camera pose for looking down toward the board and inspecting "
@@ -51,7 +51,8 @@ class ArmController:
     }
     GRIP_WIDTHS = {
         0.0: 180, 0.5: 176, 1.0: 168, 1.5: 160, 2.0: 152, 2.5: 143,
-        3.0: 134, 3.5: 125, 4.0: 115, 4.5: 105, 5.0: 95, 5.5: 80, 6.0: 57,
+        3.0: 134, 3.5: 125, 4.0: 115, 4.5: 105, 5.0: 95, 5.5: 80,
+        6.0: 57, 6.4: 0,
     }
 
     def __init__(
@@ -76,11 +77,12 @@ class ArmController:
         self._camera = None
         self.capture_dir = capture_dir or Path("/tmp/acamp-robot-captures")
         self.command_interval = max(0.0, float(command_interval))
+        self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
         return sorted(
             ("buzzer_off", "buzzer_on", "camera_capture", "capabilities", "grip_object",
-             "home", "led_color", "move_joint", "move_joints", "move_preset", "pose_info", "read_joint",
+             "hexapod_pose", "home", "led_color", "move_joint", "move_joints", "move_preset", "pose_info", "read_joint",
              "rest", "status", "stop", "target_step", "tool_position", "torque")
         )
 
@@ -106,8 +108,14 @@ class ArmController:
         if self.command_interval:
             time.sleep(self.command_interval)
 
+    def _ensure_torque(self):
+        # Each CLI call creates a fresh controller, so in-memory state cannot reveal
+        # whether a previous `rest` call disabled torque in another process.
+        self.torque(True)
+
     def move_joint(self, joint: int, angle: int, duration_ms: int = 500) -> Any:
         joint, angle = self._validate_joint(joint, angle)
+        self._ensure_torque()
         result = self.device.Arm_serial_servo_write(
             joint, angle, self._validate_duration(duration_ms)
         )
@@ -122,6 +130,7 @@ class ArmController:
         if len(joints) != 6:
             raise ValueError("joints must contain six angles")
         checked = [self._validate_joint(index, angle)[1] for index, angle in enumerate(joints, 1)]
+        self._ensure_torque()
         result = self.device.Arm_serial_servo_write6_array(
             checked, self._validate_duration(duration_ms)
         )
@@ -132,7 +141,9 @@ class ArmController:
         return self.move_joints(self.HOME, duration_ms)
 
     def torque(self, on: bool = True) -> Any:
-        return self.device.Arm_serial_set_torque(1 if on else 0)
+        result = self.device.Arm_serial_set_torque(1 if on else 0)
+        self._torque_enabled = bool(on)
+        return result
 
     def stop(self) -> Any:
         return self.torque(False)
@@ -198,8 +209,8 @@ class ArmController:
 
     def grip_object(self, width_cm: float, duration_ms: int = 500) -> dict[str, Any]:
         width_cm = float(width_cm)
-        if not 0 <= width_cm <= 6.0:
-            raise ValueError("width_cm must be between 0 and 6.0")
+        if not 0 <= width_cm <= 6.4:
+            raise ValueError("width_cm must be between 0 and 6.4")
         points = sorted(self.GRIP_WIDTHS)
         lower = max(point for point in points if point <= width_cm)
         upper = min(point for point in points if point >= width_cm)
@@ -252,6 +263,29 @@ class ArmController:
             "description": self.POSE_DESCRIPTIONS.get(str(name), "A legacy task pose."),
             "tool": self.tool_position(joints),
         }
+
+    def hexapod_pose(
+        self,
+        name: str,
+        base_angle: int = 90,
+        gripper_angle: int | None = None,
+        duration_ms: int = 1000,
+    ) -> dict[str, Any]:
+        """Use the legacy poses for looking at or transferring a carried box."""
+        templates = {
+            "look": [100, 15, 20, 90, 180],
+            "grab": [65, 30, 55, 265, 30],
+            "drop": [68, 30, 55, 265, 135],
+        }
+        name = str(name).lower()
+        if name not in templates:
+            raise ValueError("hexapod pose must be look, grab, or drop")
+        base_angle = self._validate_joint(1, base_angle)[1]
+        joints = [base_angle, *templates[name]]
+        if gripper_angle is not None:
+            joints[5] = self._validate_joint(6, gripper_angle)[1]
+        self.move_joints(joints, duration_ms)
+        return {"accepted": True, "pose": name, "joints": joints}
 
     def target_step(self, section: int | str, duration_ms: int = 300) -> dict[str, Any]:
         """Move the base one bounded step toward an 11-section visual target."""

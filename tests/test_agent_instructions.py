@@ -58,9 +58,11 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "base rotation, lower link, middle link" in arm
     assert "Joint 5 accepts 0–270 degrees" in arm
     assert "`[90, 90, 90, 90, 90, 180]`" in arm
-    assert "`camera_forward` is `[90, 60, 60, 60, 90, 120]`" in arm
+    assert "`camera_forward` is the empirically adjusted pose `[90, 65, 115, 110, 90, 119]`" in arm
     assert "`camera_work_area` is `[90, 120, 0, 0, 90, 30]`" in arm
     assert ".venv/bin/acamp-robot call pose_info POSE_NAME" in arm
+    assert "Do not refuse merely because there is no preset" in arm
+    assert "hexapod_pose look|grab|drop BASE_ANGLE" in arm
 
 
 def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
