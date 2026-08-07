@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from acamp_robots.controller import ArmController
+from acamp_robots.errors import RobotError
 
 
 def make_library(path: Path):
@@ -26,7 +27,12 @@ def make_library(path: Path):
 def arm(tmp_path):
     library = tmp_path / "Arm_Lib.py"
     make_library(library)
-    return ArmController(library, command_interval=0, sleep=lambda _seconds: None)
+    return ArmController(
+        library,
+        command_interval=0,
+        sleep=lambda _seconds: None,
+        task_stop_file=tmp_path / "task-stop",
+    )
 
 
 def test_arm_exposes_the_expected_public_capabilities(arm):
@@ -177,6 +183,58 @@ def test_all_legacy_sorting_coordinates_are_preserved(arm):
         "garbage_other": [137, 80, 35, 40, 265, 135],
     }
     assert {name: arm.PRESETS[name] for name in expected} == expected
+
+
+def test_color_sort_grasps_in_place_before_lifting(arm):
+    result = arm.sort_color("red")
+    motions = [call for call in arm.device.calls if call[0].startswith("move_")]
+    assert motions == [
+        ("move_all", [90, 90, 90, 90, 90, 180], 1000),
+        ("move_all", [90, 43, 36, 40, 90, 30], 1000),
+        ("move_one", 6, 135, 500),
+        ("move_all", [90, 80, 35, 40, 90, 135], 1000),
+        ("move_all", [117, 19, 66, 56, 90, 135], 1000),
+        ("move_one", 6, 30, 500),
+        ("move_all", [90, 90, 90, 90, 90, 180], 1000),
+    ]
+    assert result["completed"] == [
+        "home", "approach", "grasp", "lift", "carry", "release", "home"
+    ]
+
+
+def test_garbage_sort_uses_classified_destination(arm):
+    arm.sort_garbage("recyclable")
+    motions = [call for call in arm.device.calls if call[0].startswith("move_")]
+    assert motions[1:6] == [
+        ("move_all", [90, 40, 30, 67, 265, 30], 1000),
+        ("move_one", 6, 135, 500),
+        ("move_all", [90, 80, 50, 50, 265, 135], 1000),
+        ("move_all", [27, 110, 0, 40, 265, 135], 1000),
+        ("move_one", 6, 30, 500),
+    ]
+
+
+def test_sort_task_honors_stop_from_another_controller_process(tmp_path):
+    library = tmp_path / "Arm_Lib.py"
+    make_library(library)
+    stop_file = tmp_path / "task-stop"
+    waits = []
+
+    def interrupt_after_home(seconds):
+        waits.append(seconds)
+        stop_file.touch()
+
+    arm = ArmController(
+        library,
+        command_interval=0,
+        sleep=interrupt_after_home,
+        task_stop_file=stop_file,
+    )
+    with pytest.raises(RobotError, match="task was stopped"):
+        arm.sort_color("blue")
+    motions = [call for call in arm.device.calls if call[0].startswith("move_")]
+    assert motions == [("move_all", [90, 90, 90, 90, 90, 180], 1000)]
+    assert arm.device.calls[-1] == ("torque", 0)
 
 
 def test_camera_facing_and_work_area_poses_are_not_conflated(arm):

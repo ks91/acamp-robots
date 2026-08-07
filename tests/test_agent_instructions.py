@@ -75,6 +75,9 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "Never lift while first closing the gripper" in arm
     assert "`move_preset color_grab`, then `move_joint 6 135`, then `move_preset color_lift`" in arm
     assert "Never merge adjacent commands" in arm
+    assert ".venv/bin/acamp-robot call sort_color COLOR" in arm
+    assert ".venv/bin/acamp-robot call sort_garbage CATEGORY" in arm
+    assert "do not reconstruct those mechanical sequences yourself" in arm
 
 
 def test_hexapod_module_contains_rpc_direction_and_rest_semantics():

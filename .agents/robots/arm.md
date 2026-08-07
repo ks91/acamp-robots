@@ -14,7 +14,7 @@
 
 - Joints 1–6 are base rotation, lower link, middle link, upper link, wrist rotation, and gripper.
 - Joints 1–4 and 6 accept 0–180 degrees. Joint 5 accepts 0–270 degrees. Never guess or bypass these enforced ranges.
-- Public calls include `home`, `move_joint`, `read_joint`, `move_joints`, `stop`, `rest`, `camera_capture`, `led_color`, `buzzer_on`, `buzzer_off`, `grip_object`, `tool_position`, `move_preset`, `pose_info`, `target_step`, and `hexapod_pose`.
+- Public calls include `home`, `move_joint`, `read_joint`, `move_joints`, `stop`, `rest`, `camera_capture`, `led_color`, `buzzer_on`, `buzzer_off`, `grip_object`, `tool_position`, `move_preset`, `pose_info`, `target_step`, `hexapod_pose`, `sort_color`, and `sort_garbage`.
 - Map `まっすぐ立って`, `ホームポジション`, and "go home" to `.venv/bin/acamp-robot call home`.
 - Home is `[90, 90, 90, 90, 90, 180]`: upright with the gripper closed. Do not substitute the open angle 30 used by viewing and pickup poses.
 - Map `休め`, `休んで`, `おやすみ`, `寝て`, `力を抜いて`, emergency stop, and explicit torque-off requests to `.venv/bin/acamp-robot call rest`. Both `stop` and `rest` disable servo torque. Use `home` for a stable upright pose.
@@ -68,6 +68,8 @@
 - To classify either kind of box, move to its inspection pose, capture a fresh image, inspect the actual image, and decide from visible evidence. Then compose the pickup, grip, lift, destination, release, and return movements from the coordinates above. Do not claim a color, item, or garbage category from status or a stale image.
 - For both layouts, separate pickup into three commands: move to the open-gripper grab pose; close only joint 6; then move to the lift pose. Separate placement into three commands: arrive while maintaining grip; open only joint 6; then withdraw. Never merge adjacent commands in either three-command sequence.
 - For a known 3 cm color box, the concrete order is `move_preset color_grab`, then `move_joint 6 135`, then `move_preset color_lift`. Garbage sorting uses `move_preset garbage_grab`, then `move_joint 6 135`, then `move_preset garbage_lift`. At a destination, call `move_joint 6 30` before `home` or any withdrawal movement.
+- For the standard camp sorting setup, do not reconstruct those mechanical sequences yourself. After inspecting a fresh image and identifying the box color, call `.venv/bin/acamp-robot call sort_color COLOR`. After identifying the attached item and classifying it, call `.venv/bin/acamp-robot call sort_garbage CATEGORY`, where the category is `hazardous`, `recyclable`, `kitchen`, or `other`.
+- `sort_color` and `sort_garbage` enforce home, completed approach, gripper-only closure, completed lift, carry, gripper-only release, and return in that order. A `rest` or `stop` call from another process cancels the task before its next movement and disables torque. Use the individual poses only for a member's deliberate experiment or nonstandard layout.
 - Move through `home` before switching between separated inspection, pickup, and destination areas when the direct path could collide with a box, board, another robot, or the table. Preserve the held gripper angle until the box reaches its destination.
 - For collaboration with a Hexapod carrying a box, use `hexapod_pose look|grab|drop BASE_ANGLE`. The base angle is deliberately supplied at runtime because the Hexapod may approach from different directions. Use camera observations and bounded `target_step` corrections instead of guessing that angle.
 

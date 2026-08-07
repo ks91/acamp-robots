@@ -180,6 +180,8 @@ The instructions also state general embodied-planning invariants for smaller mod
 
 Every arm movement waits for its complete servo duration plus the vendor-required 100 ms command interval before returning. Sequential CLI calls therefore cannot overlap an unfinished approach, gripper closure, and lift.
 
+For the standard 3 cm camp boxes, `sort_color COLOR` and `sort_garbage CATEGORY` provide deterministic manipulation after visual classification. They enforce approach completion, joint-6-only grasp, lift, destination transfer, joint-6-only release, and return. A concurrent `stop` or `rest` creates a cross-process cancellation latch and disables torque before the next task movement.
+
 In a session started by `scripts/start-agent.sh`, the staff safety check applies to the whole session. The agent executes bounded DOFBOT movements and complete requested sorting sequences without asking the member for repeated safety confirmations between movements.
 
 Hexapod example:

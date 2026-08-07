@@ -64,6 +64,7 @@ class ArmController:
         capture_dir: Path | None = None,
         command_interval: float = 0.1,
         sleep: Callable[[float], None] = time.sleep,
+        task_stop_file: Path | None = None,
     ):
         if not library_path.is_file():
             raise RobotError(f"Arm_Lib.py was not found: {library_path}")
@@ -79,13 +80,14 @@ class ArmController:
         self.capture_dir = capture_dir or Path("/tmp/acamp-robot-captures")
         self.command_interval = max(0.0, float(command_interval))
         self._sleep = sleep
+        self.task_stop_file = task_stop_file or Path("/tmp/acamp-arm-task-stop")
         self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
         return sorted(
             ("buzzer_off", "buzzer_on", "camera_capture", "capabilities", "grip_object",
              "hexapod_pose", "home", "led_color", "move_joint", "move_joints", "move_preset", "pose_info", "read_joint",
-             "rest", "status", "stop", "target_step", "tool_position", "torque")
+             "rest", "sort_color", "sort_garbage", "status", "stop", "target_step", "tool_position", "torque")
         )
 
     @classmethod
@@ -150,10 +152,77 @@ class ArmController:
         return result
 
     def stop(self) -> Any:
+        self.task_stop_file.touch(exist_ok=True)
         return self.torque(False)
 
     def rest(self) -> Any:
         return self.stop()
+
+    def _start_task(self):
+        self.task_stop_file.unlink(missing_ok=True)
+
+    def _check_task_cancelled(self):
+        if self.task_stop_file.exists():
+            raise RobotError("Arm task was stopped")
+
+    def _task_move_preset(self, name: str, duration_ms: int = 1000):
+        self._check_task_cancelled()
+        self.move_preset(name, duration_ms)
+        self._check_task_cancelled()
+
+    def _task_gripper(self, angle: int, duration_ms: int = 500):
+        self._check_task_cancelled()
+        self.move_joint(6, angle, duration_ms)
+        self._check_task_cancelled()
+
+    def _run_sort_task(self, layout: str, destination: str) -> dict[str, Any]:
+        self._start_task()
+        completed = []
+        try:
+            self._check_task_cancelled()
+            self.home()
+            self._check_task_cancelled()
+            completed.append("home")
+            self._task_move_preset(f"{layout}_grab")
+            completed.append("approach")
+            self._task_gripper(135)
+            completed.append("grasp")
+            self._task_move_preset(f"{layout}_lift")
+            completed.append("lift")
+            self._task_move_preset(destination)
+            completed.append("carry")
+            self._task_gripper(30)
+            completed.append("release")
+            self._check_task_cancelled()
+            self.home()
+            self._check_task_cancelled()
+            completed.append("home")
+        except Exception:
+            self.torque(False)
+            raise
+        return {"accepted": True, "task": f"sort_{layout}", "destination": destination, "completed": completed}
+
+    def sort_color(self, color: str) -> dict[str, Any]:
+        """Sort the known 3 cm box after its color has been identified."""
+        aliases = {"red": "red", "blue": "blue", "green": "green", "yellow": "yellow"}
+        color = str(color).lower()
+        if color not in aliases:
+            raise ValueError("color must be red, blue, green, or yellow")
+        return self._run_sort_task("color", f"color_{aliases[color]}")
+
+    def sort_garbage(self, category: str) -> dict[str, Any]:
+        """Sort the known 3 cm box after its attached item has been classified."""
+        aliases = {
+            "hazardous": "hazardous", "red": "hazardous",
+            "recyclable": "recyclable", "blue": "recyclable",
+            "kitchen": "kitchen", "green": "kitchen",
+            "other": "other", "gray": "other", "grey": "other",
+        }
+        category = str(category).lower()
+        if category not in aliases:
+            raise ValueError("category must be hazardous, recyclable, kitchen, or other")
+        destination = f"garbage_{aliases[category]}"
+        return self._run_sort_task("garbage", destination)
 
     def led_color(self, red: int = 0, green: int = 0, blue: int = 0) -> Any:
         values = tuple(int(value) for value in (red, green, blue))
