@@ -21,6 +21,15 @@
 - For an object with a stated width from 0 through 6.4 cm, call `grip_object WIDTH_CM`. Never guess a tight gripper angle when width is unknown; incorrect tight angles can stall and damage the servo.
 - A movement call explicitly enables torque first, including after a previous CLI process handled `rest`; members should not have to know or repair that process boundary.
 
+## Embodied planning
+
+- Before manipulating an object, silently plan the physical states in order: observe, approach with the gripper open, arrive at the object, close the gripper without moving the arm, lift, carry while maintaining grip, arrive at the destination, open the gripper without moving the arm, and withdraw. Execute promptly; do not recite the plan or ask the member to approve each state.
+- Contact must happen before grasp, grasp before lift, arrival before release, and release before withdrawal. Never lift while first closing the gripper, and never withdraw while first opening it.
+- Change only the joints required for the current physical action. `move_joint 6 ANGLE` and `grip_object WIDTH_CM` change only the gripper and preserve joints 1–5. Use one of them for grasping or releasing; do not send a six-joint lift or destination pose until that gripper-only command has completed.
+- A named pose is a body configuration, not proof that its physical purpose has happened. Reaching `color_grab` means the open gripper is at the box; it does not mean the box is held. Reaching a destination with a closed gripper does not mean the box has been released.
+- Preserve state deliberately between commands. While carrying an object, retain the actual joint-6 gripping angle in the next six-joint pose. Do not reset unrelated joints merely because a preset contains convenient defaults.
+- Use evidence rather than assuming physical success. Joint reads can confirm commanded angles and a fresh camera image can confirm visible position. Never claim that an object was grasped, carried, sorted, or released solely because a command returned successfully.
+
 ## Geometry and camera poses
 
 - Joint 1 controls horizontal direction: 90 degrees is directly forward, smaller is right, and larger is left.
@@ -56,6 +65,8 @@
   - kitchen/green destination: `garbage_kitchen` = `[152, 110, 0, 40, 265, 135]`
   - other/gray destination: `garbage_other` = `[137, 80, 35, 40, 265, 135]`
 - To classify either kind of box, move to its inspection pose, capture a fresh image, inspect the actual image, and decide from visible evidence. Then compose the pickup, grip, lift, destination, release, and return movements from the coordinates above. Do not claim a color, item, or garbage category from status or a stale image.
+- For both layouts, separate pickup into three commands: move to the open-gripper grab pose; close only joint 6; then move to the lift pose. Separate placement into three commands: arrive while maintaining grip; open only joint 6; then withdraw. Never merge adjacent commands in either three-command sequence.
+- For a known 3 cm color box, the concrete order is `move_preset color_grab`, then `move_joint 6 135`, then `move_preset color_lift`. Garbage sorting uses `move_preset garbage_grab`, then `move_joint 6 135`, then `move_preset garbage_lift`. At a destination, call `move_joint 6 30` before `home` or any withdrawal movement.
 - Move through `home` before switching between separated inspection, pickup, and destination areas when the direct path could collide with a box, board, another robot, or the table. Preserve the held gripper angle until the box reaches its destination.
 - For collaboration with a Hexapod carrying a box, use `hexapod_pose look|grab|drop BASE_ANGLE`. The base angle is deliberately supplied at runtime because the Hexapod may approach from different directions. Use camera observations and bounded `target_step` corrections instead of guessing that angle.
 

@@ -69,6 +69,12 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "Execute supported bounded arm requests directly without asking" in arm
     assert "Do not insert a new confirmation between stages" in arm
     assert "do not turn ordinary operation into a safety quiz" in arm
+    assert "Contact must happen before grasp, grasp before lift" in arm
+    assert "close the gripper without moving the arm" in arm
+    assert "A named pose is a body configuration" in arm
+    assert "Never lift while first closing the gripper" in arm
+    assert "`move_preset color_grab`, then `move_joint 6 135`, then `move_preset color_lift`" in arm
+    assert "Never merge adjacent commands" in arm
 
 
 def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
