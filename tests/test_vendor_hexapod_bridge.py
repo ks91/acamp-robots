@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 7
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 8
 
 
 class FakeThread:
@@ -57,7 +57,9 @@ def test_bridge_preserves_the_legacy_hexapod_api_surface():
 
 def test_bridge_exposes_complete_semantic_motion_surface():
     capabilities = set(MODULE.FreenoveDevice(FakeControl()).capabilities())
-    assert {"walk", "turn", "body_height", "stand", "stop", "rest"} <= capabilities
+    assert {
+        "walk", "turn", "body_height", "perform", "stand", "stop", "rest"
+    } <= capabilities
 
 
 def test_move_is_translated_to_freenove_command_queue():
@@ -211,6 +213,67 @@ def test_ball_controller_advances_when_far_and_retreats_when_too_close():
     assert robot._ball_motion(center_x=180, radius=15)[0] > 0
     robot._reset_ball_pid()
     assert robot._ball_motion(center_x=180, radius=45)[0] < 0
+
+
+def test_red_ball_detection_matches_the_proven_01_threshold_and_centroid(monkeypatch):
+    calls = []
+
+    class CV2:
+        COLOR_BGR2HSV = 1
+        RETR_EXTERNAL = 2
+        CHAIN_APPROX_SIMPLE = 3
+
+        @staticmethod
+        def GaussianBlur(frame, kernel, sigma):
+            return frame
+
+        @staticmethod
+        def cvtColor(frame, conversion):
+            return frame
+
+        @staticmethod
+        def inRange(frame, low, high):
+            calls.append((low, high))
+            return "binary"
+
+        @staticmethod
+        def dilate(binary, kernel, iterations):
+            return binary
+
+        @staticmethod
+        def findContours(binary, mode, method):
+            return (["ball"], None)
+
+        @staticmethod
+        def contourArea(contour):
+            return 100
+
+        @staticmethod
+        def minEnclosingCircle(contour):
+            return ((999, 20), 20)
+
+        @staticmethod
+        def moments(contour):
+            return {"m00": 2, "m10": 360, "m01": 40}
+
+    robot = MODULE.FreenoveDevice(FakeControl())
+    detection = robot._detect_red_ball("frame", CV2)
+    assert calls == [((0, 180, 180), (5, 255, 255))]
+    assert detection == (180, 20)
+
+
+def test_rock_and_roll_is_a_bounded_supported_performance(monkeypatch):
+    robot = MODULE.FreenoveDevice(FakeControl())
+    monkeypatch.setattr(robot._performance_stop, "wait", lambda duration: False)
+    result = robot.perform("rock_and_roll")
+    assert result == {"accepted": True, "performance": "rock_and_roll"}
+    assert robot.control.command_queue == ["CMD_ATTITUDE", "0", "0", "0"]
+
+
+def test_perform_rejects_unknown_styles_with_available_choices():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    with pytest.raises(ValueError, match="rock_and_roll"):
+        robot.perform("unsafe_improvisation")
 
 
 def test_walk_rejects_unknown_directions_and_large_steps():

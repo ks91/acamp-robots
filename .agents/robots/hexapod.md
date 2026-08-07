@@ -30,10 +30,13 @@
 - `position X Y Z` translates the body and `attitude ROLL PITCH YAW` tilts it. Use these bounded vendor posture controls for explicit research behaviors; return to `position 0 0 0` and `attitude 0 0 0` for neutral posture.
 - `head_horizontal ANGLE` turns the camera head: 90 is center, smaller angles look right, and larger angles look left. `head_vertical ANGLE` tilts it vertically: 90 is straight ahead, with a supported range of 60–180.
 - `balance true` enables IMU balance and `balance false` disables it. Do not leave balance mode running when the participant asks to stop or rest.
+- Do not refuse an imaginative request merely because it is imaginative. Small, bounded, stoppable posture choreography is routine supported motion in a prepared session.
+- Map requests for a rock-and-roll movement, including `ロックンロールな動き`, to `.venv/bin/acamp-robot call perform rock_and_roll`. Other built-in short performances are `nod`, `sway`, `bounce`, `curious`, `happy`, and `thinking`; query `capabilities` and use `perform STYLE` rather than improvising unbounded shell-side sleeps.
+- For a new creative movement, help the member make a tested behavior under `skills/` from bounded `position`, `attitude`, head, `walk`, and `turn` calls. Decline only the unsafe part of a request, not creativity itself.
 
 ## Camera and peripherals
 
 - Camera capture is available while `hardware_initialized` is false and must not initialize or enable servos. Do not move the robot merely to answer a visual question unless asked for a different view.
-- Map a request to follow or chase the red ball to `ball_start`; it centers the head and continuously steers and moves both forward and backward to maintain its target distance. Map requests to stop following to `ball_stop`, and use `ball_state` to inspect the tracker. Do not replace these with repeated camera captures or agent-generated movement commands.
+- Map a request to follow or chase the red ball to `ball_start`; it centers the head and continuously steers and moves both forward and backward to maintain its target distance. Its color threshold, contour centroid, and PID gains deliberately match the proven 01 implementation. Map requests to stop following to `ball_stop`, and use `ball_state` to inspect the tracker. Do not replace these with repeated camera captures or agent-generated movement commands.
 - The RPC surface also provides ultrasonic distance (`sonic`), battery voltage (`power`), static RGB color (`led_color`), LED effects (`led_mode`), buzzer control, camera capture, red-ball tracking, head and whole-body posture control, balance, and per-leg position and angle control. Query `capabilities` rather than guessing method names.
 - Manual per-leg calls are for deliberately programmed, reviewed behaviors only. Stop walking and ball tracking before using them; do not use raw servo angles for ordinary participant language.

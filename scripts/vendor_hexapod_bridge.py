@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 7
+BRIDGE_PROTOCOL_VERSION = 8
 
 
 class _TrackingPID:
@@ -54,6 +54,53 @@ class FreenoveDevice:
         (16, 17, 18),
     ]
 
+    _PERFORMANCES = {
+        "nod": (
+            ("head_vertical", (78,), 0.15),
+            ("head_vertical", (100,), 0.15),
+            ("head_vertical", (90,), 0.10),
+        ),
+        "sway": (
+            ("position", (-8, 0, 0), 0.16),
+            ("attitude", (-7, 0, -4), 0.16),
+            ("position", (8, 0, 0), 0.16),
+            ("attitude", (7, 0, 4), 0.16),
+        ),
+        "bounce": (
+            ("position", (0, 0, 8), 0.14),
+            ("position", (0, 0, -5), 0.14),
+            ("position", (0, 0, 7), 0.14),
+        ),
+        "curious": (
+            ("head_horizontal", (70,), 0.18),
+            ("attitude", (0, 5, -5), 0.18),
+            ("head_horizontal", (110,), 0.18),
+            ("attitude", (0, -3, 5), 0.18),
+        ),
+        "happy": (
+            ("attitude", (7, 0, 6), 0.15),
+            ("attitude", (-7, 0, -6), 0.15),
+            ("attitude", (6, 0, 5), 0.15),
+        ),
+        "thinking": (
+            ("head_horizontal", (65,), 0.22),
+            ("head_horizontal", (115,), 0.22),
+            ("head_horizontal", (85,), 0.15),
+        ),
+        "rock_and_roll": (
+            ("position", (-10, 0, 5), 0.15),
+            ("attitude", (-8, 4, -7), 0.15),
+            ("head_horizontal", (65,), 0.12),
+            ("position", (10, 0, -3), 0.15),
+            ("attitude", (8, -4, 7), 0.15),
+            ("head_horizontal", (115,), 0.12),
+            ("position", (-8, 0, 6), 0.14),
+            ("attitude", (-6, 3, -5), 0.14),
+            ("position", (8, 0, -3), 0.14),
+            ("attitude", (6, -3, 5), 0.14),
+        ),
+    }
+
     def __init__(self, control=None, server_dir=None):
         self.control = control
         self.server_dir = Path(server_dir or Path.cwd()).resolve()
@@ -70,6 +117,8 @@ class FreenoveDevice:
         self._ball_active = False
         self._ball_tracking = False
         self._reset_ball_pid()
+        self._performance_stop = threading.Event()
+        self._performance_lock = threading.Lock()
 
     @property
     def hardware_initialized(self):
@@ -168,6 +217,7 @@ class FreenoveDevice:
             self._queue("CMD_MOVE", gait, x, y, self.move_speed, angle)
 
     def stop(self):
+        self._performance_stop.set()
         with self._lock:
             self._cancel_stop_timer()
             self._moving = False
@@ -242,6 +292,35 @@ class FreenoveDevice:
         z = heights[level]
         self.position(0, 0, z)
         return {"accepted": True, "height": level, "z": z}
+
+    def perform(self, style="happy"):
+        """Run a short, bounded, interruptible whole-body performance."""
+        style = str(style).lower().strip().replace("-", "_").replace(" ", "_")
+        aliases = {"rock": "rock_and_roll", "rocknroll": "rock_and_roll"}
+        style = aliases.get(style, style)
+        if style not in self._PERFORMANCES:
+            choices = ", ".join(sorted(self._PERFORMANCES))
+            raise ValueError(f"unknown performance; choose one of: {choices}")
+        if not self._performance_lock.acquire(blocking=False):
+            raise RuntimeError("another performance is already running")
+        try:
+            if self._ball_active:
+                self.ball_stop()
+            self.stop()
+            self._performance_stop.clear()
+            for method, args, pause in self._PERFORMANCES[style]:
+                if self._performance_stop.is_set():
+                    return {"accepted": True, "performance": style, "cancelled": True}
+                getattr(self, method)(*args)
+                if self._performance_stop.wait(pause):
+                    return {"accepted": True, "performance": style, "cancelled": True}
+            self.position(0, 0, 0)
+            self.attitude(0, 0, 0)
+            self.head_horizontal(90)
+            self.head_vertical(90)
+            return {"accepted": True, "performance": style}
+        finally:
+            self._performance_lock.release()
 
     def balance(self, on=False):
         with self._lock:
@@ -389,23 +468,12 @@ class FreenoveDevice:
                 )
                 if frame is None:
                     raise RuntimeError("Camera returned an undecodable frame")
-                filtered = cv2.cvtColor(cv2.GaussianBlur(frame, (3, 3), 0), cv2.COLOR_BGR2HSV)
-                red_low = cv2.inRange(filtered, (0, 160, 140), (10, 255, 255))
-                red_high = cv2.inRange(filtered, (170, 160, 140), (180, 255, 255))
-                binary = cv2.dilate(
-                    cv2.bitwise_or(red_low, red_high), None, iterations=1
-                )
-                contours = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
-                if not contours:
+                detection = self._detect_red_ball(frame, cv2)
+                if detection is None:
                     self.stop()
                     time.sleep(0.05)
                     continue
-                contour = max(contours, key=cv2.contourArea)
-                ((x, _y), radius) = cv2.minEnclosingCircle(contour)
-                if radius < 7:
-                    self.stop()
-                    time.sleep(0.05)
-                    continue
+                x, radius = detection
                 step, angle = self._ball_motion(x, radius)
                 self.move(gait=1, x=0, y=step, angle=angle)
                 self._ball_tracking = not (step == 0 and angle == 0)
@@ -415,6 +483,26 @@ class FreenoveDevice:
                 self._ball_tracking = False
                 return
             time.sleep(0.05)
+
+    @staticmethod
+    def _detect_red_ball(frame, cv2):
+        """Detect a ball exactly as the proven 01 tracker did."""
+        filtered = cv2.GaussianBlur(frame, (3, 3), 0)
+        filtered = cv2.cvtColor(filtered, cv2.COLOR_BGR2HSV)
+        binary = cv2.inRange(filtered, (0, 180, 180), (5, 255, 255))
+        binary = cv2.dilate(binary, None, iterations=1)
+        contours = cv2.findContours(
+            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )[-2]
+        if not contours:
+            return None
+        contour = max(contours, key=cv2.contourArea)
+        ((_circle_x, _circle_y), radius) = cv2.minEnclosingCircle(contour)
+        moments = cv2.moments(contour)
+        if radius < 7 or moments["m00"] <= 0:
+            return None
+        center_x = int(moments["m10"] / moments["m00"])
+        return center_x, radius
 
     def _reset_ball_pid(self):
         self._pid_x = _TrackingPID(p=0.05, i=0.005, d=0.02)
@@ -519,7 +607,7 @@ class FreenoveDevice:
                 "body_height",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
                 "head_horizontal", "head_vertical", "led_color", "led_mode", "position",
-                "move", "power", "rest", "servopower", "set_leg_joint_angles",
+                "move", "perform", "power", "rest", "servopower", "set_leg_joint_angles",
                 "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
                 "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
                 "stand", "stop", "timed_move", "turn", "walk",

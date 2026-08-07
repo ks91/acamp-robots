@@ -75,6 +75,8 @@ def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
     assert ".venv/bin/acamp-robot call body_height LEVEL" in hexapod
     assert "low`, `normal`, and `high" in hexapod
     assert "ball_start" in hexapod and "ball_stop" in hexapod
+    assert ".venv/bin/acamp-robot call perform rock_and_roll" in hexapod
+    assert "Do not refuse an imaginative request merely because it is imaginative" in hexapod
 
 
 def test_camp_template_contains_operational_sections():
