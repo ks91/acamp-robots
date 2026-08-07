@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 8
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 9
 
 
 class FakeThread:
@@ -213,6 +213,35 @@ def test_ball_controller_advances_when_far_and_retreats_when_too_close():
     assert robot._ball_motion(center_x=180, radius=15)[0] > 0
     robot._reset_ball_pid()
     assert robot._ball_motion(center_x=180, radius=45)[0] < 0
+
+
+def test_ball_controller_has_stable_distance_and_center_deadbands():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    assert robot._ball_motion(center_x=180, radius=22.5) == (0, 0)
+    robot._reset_ball_pid()
+    assert robot._ball_motion(center_x=185, radius=22.5) == (0, 0)
+
+
+def test_ball_tracker_bridges_three_dropped_frames_before_stopping():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    first = robot._update_ball_observation((180, 15), now=10.0)
+    assert first[0] > 0
+    assert robot._update_ball_observation(None, now=10.1) == first
+    assert robot._update_ball_observation(None, now=10.2) == first
+    assert robot._update_ball_observation(None, now=10.3) == first
+    assert robot._update_ball_observation(None, now=10.4) == (0, 0)
+    assert robot.status()["ball_tracking"]["missed_frames"] == 4
+
+
+def test_ball_tracker_smooths_noisy_centers_and_reports_telemetry():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    robot._update_ball_observation((140, 20), now=20.0)
+    robot._update_ball_observation((220, 24), now=20.04)
+    telemetry = robot.status()["ball_tracking"]
+    assert 140 < telemetry["center_x"] < 220
+    assert 20 < telemetry["radius"] < 24
+    assert telemetry["frame_interval_ms"] == pytest.approx(40)
+    assert telemetry["missed_frames"] == 0
 
 
 def test_red_ball_detection_matches_the_proven_01_threshold_and_centroid(monkeypatch):

@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 8
+BRIDGE_PROTOCOL_VERSION = 9
 
 
 class _TrackingPID:
@@ -100,6 +100,8 @@ class FreenoveDevice:
             ("attitude", (6, -3, 5), 0.14),
         ),
     }
+    _BALL_SMOOTHING_ALPHA = 0.35
+    _BALL_LOSS_GRACE_FRAMES = 3
 
     def __init__(self, control=None, server_dir=None):
         self.control = control
@@ -469,12 +471,9 @@ class FreenoveDevice:
                 if frame is None:
                     raise RuntimeError("Camera returned an undecodable frame")
                 detection = self._detect_red_ball(frame, cv2)
-                if detection is None:
-                    self.stop()
-                    time.sleep(0.05)
-                    continue
-                x, radius = detection
-                step, angle = self._ball_motion(x, radius)
+                step, angle = self._update_ball_observation(
+                    detection, now=time.monotonic()
+                )
                 self.move(gait=1, x=0, y=step, angle=angle)
                 self._ball_tracking = not (step == 0 and angle == 0)
             except Exception:
@@ -482,7 +481,6 @@ class FreenoveDevice:
                 self._ball_active = False
                 self._ball_tracking = False
                 return
-            time.sleep(0.05)
 
     @staticmethod
     def _detect_red_ball(frame, cv2):
@@ -509,14 +507,60 @@ class FreenoveDevice:
         self._pid_distance = _TrackingPID(p=0.3, i=0.05, d=0.05)
         self._pid_x.set_point = 180
         self._pid_distance.set_point = 60
+        self._ball_center_x = None
+        self._ball_radius = None
+        self._ball_missed_frames = 0
+        self._ball_last_frame_at = None
+        self._ball_frame_interval_ms = None
+        self._ball_last_command = (0, 0)
+
+    def _update_ball_observation(self, detection, now=None):
+        """Smooth detections and tolerate brief losses without stop-start motion."""
+        now = time.monotonic() if now is None else float(now)
+        if self._ball_last_frame_at is not None:
+            self._ball_frame_interval_ms = (now - self._ball_last_frame_at) * 1000
+        self._ball_last_frame_at = now
+        if detection is None:
+            self._ball_missed_frames += 1
+            if self._ball_missed_frames <= self._BALL_LOSS_GRACE_FRAMES:
+                return self._ball_last_command
+            self._ball_last_command = (0, 0)
+            return self._ball_last_command
+
+        center_x, radius = (float(value) for value in detection)
+        alpha = self._BALL_SMOOTHING_ALPHA
+        if self._ball_center_x is None:
+            self._ball_center_x, self._ball_radius = center_x, radius
+        else:
+            self._ball_center_x += alpha * (center_x - self._ball_center_x)
+            self._ball_radius += alpha * (radius - self._ball_radius)
+        self._ball_missed_frames = 0
+        self._ball_last_command = self._ball_motion(
+            self._ball_center_x, self._ball_radius
+        )
+        return self._ball_last_command
 
     def _ball_motion(self, center_x, radius):
         """Return forward step and clockwise angle for a detected red ball."""
         if float(radius) <= 0:
             raise ValueError("radius must be positive")
         distance = round(2700 / (2 * float(radius)))
-        angle = max(-10, min(10, int(self._pid_x.compute(float(center_x)))))
-        step = max(-15, min(15, int(self._pid_distance.compute(distance))))
+        if 170 <= float(center_x) <= 190:
+            self._pid_x.last_error = 0
+            self._pid_x.i_error = 0
+            angle = 0
+        else:
+            angle = max(-10, min(10, int(self._pid_x.compute(float(center_x)))))
+            if angle == 0:
+                angle = -1 if center_x < 180 else 1
+        if 55 <= distance <= 65:
+            self._pid_distance.last_error = 0
+            self._pid_distance.i_error = 0
+            step = 0
+        else:
+            step = max(-15, min(15, int(self._pid_distance.compute(distance))))
+            if step == 0:
+                step = 1 if distance > 60 else -1
         return step, angle
 
     def _assert_leg_index(self, leg_index):
@@ -594,6 +638,18 @@ class FreenoveDevice:
             "servo_power": self._servo_power,
             "speed": self.move_speed,
             "last_command": self._last_command,
+            "ball_tracking": {
+                "active": self._ball_active,
+                "tracking": self._ball_tracking,
+                "center_x": self._ball_center_x,
+                "radius": self._ball_radius,
+                "missed_frames": self._ball_missed_frames,
+                "frame_interval_ms": self._ball_frame_interval_ms,
+                "last_motion": {
+                    "step": self._ball_last_command[0],
+                    "angle": self._ball_last_command[1],
+                },
+            },
         }
         if self.hardware_initialized:
             result["control_thread_alive"] = self.control.condition_thread.is_alive()
