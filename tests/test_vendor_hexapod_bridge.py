@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 6
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 7
 
 
 class FakeThread:
@@ -55,13 +55,35 @@ def test_bridge_preserves_the_legacy_hexapod_api_surface():
     assert expected <= set(MODULE.FreenoveDevice(FakeControl()).capabilities())
 
 
+def test_bridge_exposes_complete_semantic_motion_surface():
+    capabilities = set(MODULE.FreenoveDevice(FakeControl()).capabilities())
+    assert {"walk", "turn", "body_height", "stand", "stop", "rest"} <= capabilities
+
+
 def test_move_is_translated_to_freenove_command_queue():
     control = FakeControl()
     robot = MODULE.FreenoveDevice(control)
-    robot.speed(12)
+    robot.speed(10)
     robot.move(gait=2, x=5, y=-4, angle=3)
-    assert control.command_queue == ["CMD_MOVE", "2", "5", "-4", "12", "3"]
+    assert control.command_queue == ["CMD_MOVE", "2", "5", "-4", "10", "3"]
     assert control.timeout > 0
+
+
+def test_low_level_motion_rejects_values_outside_documented_vendor_surface():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    for kwargs in ({"gait": 3}, {"x": 31}, {"y": -31}, {"angle": 21}):
+        with pytest.raises(ValueError):
+            robot.move(**kwargs)
+
+
+def test_speed_uses_the_vendor_supported_two_through_ten_range():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    assert robot.speed(2) == 2
+    assert robot.speed(10) == 10
+    with pytest.raises(ValueError):
+        robot.speed(1)
+    with pytest.raises(ValueError):
+        robot.speed(11)
 
 
 def test_head_angle_is_limited_to_servo_range():
@@ -148,12 +170,55 @@ def test_walk_translates_named_directions_to_vendor_coordinates(
     assert result["direction"] == direction
 
 
+def test_walk_default_has_a_visible_fifteen_millimetre_stride():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.walk("forward")
+    robot._cancel_stop_timer()
+    assert control.command_queue[3] == "15"
+    assert result["step"] == 15
+
+
+@pytest.mark.parametrize(
+    ("direction", "expected_angle"),
+    [("clockwise", "10"), ("counterclockwise", "-10")],
+)
+def test_turn_translates_named_rotation_without_guessing_coordinates(
+    direction, expected_angle
+):
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.turn(direction)
+    robot._cancel_stop_timer()
+    assert control.command_queue == ["CMD_MOVE", "1", "1", "0", "8", expected_angle]
+    assert result["direction"] == direction
+
+
+@pytest.mark.parametrize(
+    ("level", "expected_z"),
+    [("low", "-15"), ("normal", "0"), ("high", "15")],
+)
+def test_body_height_exposes_named_bounded_postures(level, expected_z):
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.body_height(level)
+    assert control.command_queue == ["CMD_POSITION", "0", "0", expected_z]
+    assert result == {"accepted": True, "height": level, "z": int(expected_z)}
+
+
+def test_ball_controller_advances_when_far_and_retreats_when_too_close():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    assert robot._ball_motion(center_x=180, radius=15)[0] > 0
+    robot._reset_ball_pid()
+    assert robot._ball_motion(center_x=180, radius=45)[0] < 0
+
+
 def test_walk_rejects_unknown_directions_and_large_steps():
     robot = MODULE.FreenoveDevice(FakeControl())
     with pytest.raises(ValueError):
         robot.walk("diagonal")
     with pytest.raises(ValueError):
-        robot.walk("forward", step=11)
+        robot.walk("forward", step=31)
 
 
 def test_load_device_changes_to_vendor_directory(monkeypatch, tmp_path):

@@ -70,6 +70,11 @@ def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
     assert "positive `y` for forward" in hexapod
     assert "positive `x` for right" in hexapod
     assert ".venv/bin/acamp-robot call rest" in hexapod
+    assert ".venv/bin/acamp-robot call turn DIRECTION DURATION" in hexapod
+    assert "clockwise" in hexapod and "counterclockwise" in hexapod
+    assert ".venv/bin/acamp-robot call body_height LEVEL" in hexapod
+    assert "low`, `normal`, and `high" in hexapod
+    assert "ball_start" in hexapod and "ball_stop" in hexapod
 
 
 def test_camp_template_contains_operational_sections():

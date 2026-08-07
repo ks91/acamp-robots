@@ -13,7 +13,33 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 6
+BRIDGE_PROTOCOL_VERSION = 7
+
+
+class _TrackingPID:
+    """The ball-following controller used by the proven 01 implementation."""
+
+    def __init__(self, p=0.0, i=0.0, d=0.0):
+        self.set_point = 0.0
+        self.kp = p
+        self.ki = i
+        self.kd = d
+        self.last_error = 0.0
+        self.i_error = 0.0
+        self.i_saturation = 10.0
+
+    def compute(self, feedback):
+        error = self.set_point - feedback
+        self.i_error = max(
+            -self.i_saturation, min(self.i_saturation, self.i_error + error)
+        )
+        output = (
+            self.kp * error
+            + self.ki * self.i_error
+            + self.kd * (error - self.last_error)
+        )
+        self.last_error = error
+        return -output
 
 
 class FreenoveDevice:
@@ -43,6 +69,7 @@ class FreenoveDevice:
         self._ball_stop = threading.Event()
         self._ball_active = False
         self._ball_tracking = False
+        self._reset_ball_pid()
 
     @property
     def hardware_initialized(self):
@@ -103,7 +130,10 @@ class FreenoveDevice:
 
     def speed(self, tempo=8):
         with self._lock:
-            self.move_speed = max(1, min(int(tempo), 20))
+            tempo = int(tempo)
+            if not 2 <= tempo <= 10:
+                raise ValueError("tempo must be between 2 and 10")
+            self.move_speed = tempo
             return self.move_speed
 
     def _queue(self, *values):
@@ -117,11 +147,25 @@ class FreenoveDevice:
             self._stop_timer = None
 
     def move(self, gait=1, x=0, y=0, angle=0):
-        # Values are restricted again by Freenove's condition monitor.
+        gait, x, y, angle = int(gait), int(x), int(y), int(angle)
+        if gait not in (1, 2):
+            raise ValueError("gait must be 1 or 2")
+        if not -30 <= x <= 30 or not -30 <= y <= 30:
+            raise ValueError("x and y must be between -30 and 30")
+        if not -20 <= angle <= 20:
+            raise ValueError("angle must be between -20 and 20")
+        external_motion = threading.current_thread() is not self._ball_thread
+        if external_motion and self._ball_active:
+            with self._lock:
+                self._ball_active = False
+                self._ball_tracking = False
+                self._ball_stop.set()
+            if self._ball_thread is not None and self._ball_thread.is_alive():
+                self._ball_thread.join(timeout=2.5)
         with self._lock:
             self._cancel_stop_timer()
-            self._moving = any(int(value) != 0 for value in (x, y, angle))
-            self._queue("CMD_MOVE", int(gait), int(x), int(y), self.move_speed, int(angle))
+            self._moving = any(value != 0 for value in (x, y, angle))
+            self._queue("CMD_MOVE", gait, x, y, self.move_speed, angle)
 
     def stop(self):
         with self._lock:
@@ -140,7 +184,7 @@ class FreenoveDevice:
             self._stop_timer.start()
         return {"accepted": True, "stop_after_seconds": duration}
 
-    def walk(self, direction, duration=1.0, step=5, gait=1):
+    def walk(self, direction, duration=1.0, step=15, gait=1):
         """Walk briefly using human-readable directions, not vendor coordinates."""
         direction = str(direction).lower()
         vectors = {
@@ -152,8 +196,8 @@ class FreenoveDevice:
         if direction not in vectors:
             raise ValueError("direction must be forward, backward, left, or right")
         step = int(step)
-        if not 1 <= step <= 10:
-            raise ValueError("step must be between 1 and 10")
+        if not 1 <= step <= 30:
+            raise ValueError("step must be between 1 and 30")
         x_sign, y_sign = vectors[direction]
         result = self.timed_move(
             duration,
@@ -165,6 +209,39 @@ class FreenoveDevice:
         result["direction"] = direction
         result["step"] = step
         return result
+
+    def turn(self, direction, duration=1.0, angle=10, gait=1):
+        """Turn briefly using names whose meaning is independent of vendor axes."""
+        direction = str(direction).lower().replace("-", "").replace("_", "")
+        signs = {
+            "clockwise": 1,
+            "cw": 1,
+            "counterclockwise": -1,
+            "anticlockwise": -1,
+            "ccw": -1,
+        }
+        if direction not in signs:
+            raise ValueError("direction must be clockwise or counterclockwise")
+        angle = int(angle)
+        if not 1 <= angle <= 20:
+            raise ValueError("angle must be between 1 and 20")
+        canonical = "clockwise" if signs[direction] > 0 else "counterclockwise"
+        # Freenove needs a non-zero translation component to execute rotation.
+        result = self.timed_move(
+            duration, gait=int(gait), x=1, y=0, angle=signs[direction] * angle
+        )
+        result.update({"direction": canonical, "angle": angle})
+        return result
+
+    def body_height(self, level="normal"):
+        """Set one of three tested body heights without exposing coordinate signs."""
+        heights = {"low": -15, "normal": 0, "high": 15}
+        level = str(level).lower()
+        if level not in heights:
+            raise ValueError("height must be low, normal, or high")
+        z = heights[level]
+        self.position(0, 0, z)
+        return {"accepted": True, "height": level, "z": z}
 
     def balance(self, on=False):
         with self._lock:
@@ -212,7 +289,7 @@ class FreenoveDevice:
         )
         self._led_thread.start()
 
-    def camera_capture(self, filename="image.jpg", timeout=10.0):
+    def _camera_frame(self, timeout=10.0):
         camera = self._peripheral("camera", "camera", "Camera")
         if not hasattr(camera, "streaming"):
             raise RuntimeError("No camera device is available")
@@ -241,7 +318,6 @@ class FreenoveDevice:
 
             def read_frame():
                 try:
-                    camera.get_frame()
                     frames.put((camera.get_frame(), None))
                 except Exception as exc:
                     frames.put((None, exc))
@@ -255,6 +331,10 @@ class FreenoveDevice:
                 raise error
         if not frame:
             raise RuntimeError("Camera returned an empty frame")
+        return frame
+
+    def camera_capture(self, filename="image.jpg", timeout=10.0):
+        frame = self._camera_frame(timeout)
         capture_dir = Path(os.environ.get("ACAMP_CAPTURE_DIR", "/tmp/acamp-robot-captures"))
         capture_dir.mkdir(parents=True, exist_ok=True)
         safe_name = Path(str(filename)).name or "image.jpg"
@@ -274,6 +354,7 @@ class FreenoveDevice:
         self._ball_active = True
         self._ball_tracking = True
         self._ball_stop.clear()
+        self._reset_ball_pid()
         if self._ball_thread is None or not self._ball_thread.is_alive():
             self._ball_thread = threading.Thread(target=self._ball_tracking_loop, daemon=True)
             self._ball_thread.start()
@@ -283,6 +364,12 @@ class FreenoveDevice:
         self._ball_active = False
         self._ball_tracking = False
         self._ball_stop.set()
+        if (
+            self._ball_thread is not None
+            and self._ball_thread.is_alive()
+            and threading.current_thread() is not self._ball_thread
+        ):
+            self._ball_thread.join(timeout=2.5)
         self.stop()
         return {"state": "not tracking"}
 
@@ -293,12 +380,21 @@ class FreenoveDevice:
 
     def _ball_tracking_loop(self):
         cv2 = importlib.import_module("cv2")
+        numpy = importlib.import_module("numpy")
         while not self._ball_stop.is_set():
             try:
-                image_path = self.camera_capture("ball-tracking.jpg")
-                frame = cv2.imread(image_path)
+                encoded = self._camera_frame(timeout=2.0)
+                frame = cv2.imdecode(
+                    numpy.frombuffer(encoded, dtype=numpy.uint8), cv2.IMREAD_COLOR
+                )
+                if frame is None:
+                    raise RuntimeError("Camera returned an undecodable frame")
                 filtered = cv2.cvtColor(cv2.GaussianBlur(frame, (3, 3), 0), cv2.COLOR_BGR2HSV)
-                binary = cv2.dilate(cv2.inRange(filtered, (0, 180, 180), (5, 255, 255)), None, iterations=1)
+                red_low = cv2.inRange(filtered, (0, 160, 140), (10, 255, 255))
+                red_high = cv2.inRange(filtered, (170, 160, 140), (180, 255, 255))
+                binary = cv2.dilate(
+                    cv2.bitwise_or(red_low, red_high), None, iterations=1
+                )
                 contours = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
                 if not contours:
                     self.stop()
@@ -310,9 +406,7 @@ class FreenoveDevice:
                     self.stop()
                     time.sleep(0.05)
                     continue
-                distance = round(2700 / (2 * radius))
-                angle = max(-10, min(10, int((180 - x) * -0.05)))
-                step = max(-15, min(15, int((60 - distance) * -0.3)))
+                step, angle = self._ball_motion(x, radius)
                 self.move(gait=1, x=0, y=step, angle=angle)
                 self._ball_tracking = not (step == 0 and angle == 0)
             except Exception:
@@ -321,6 +415,21 @@ class FreenoveDevice:
                 self._ball_tracking = False
                 return
             time.sleep(0.05)
+
+    def _reset_ball_pid(self):
+        self._pid_x = _TrackingPID(p=0.05, i=0.005, d=0.02)
+        self._pid_distance = _TrackingPID(p=0.3, i=0.05, d=0.05)
+        self._pid_x.set_point = 180
+        self._pid_distance.set_point = 60
+
+    def _ball_motion(self, center_x, radius):
+        """Return forward step and clockwise angle for a detected red ball."""
+        if float(radius) <= 0:
+            raise ValueError("radius must be positive")
+        distance = round(2700 / (2 * float(radius)))
+        angle = max(-10, min(10, int(self._pid_x.compute(float(center_x)))))
+        step = max(-15, min(15, int(self._pid_distance.compute(distance))))
+        return step, angle
 
     def _assert_leg_index(self, leg_index):
         if not 0 <= int(leg_index) <= 5:
@@ -407,12 +516,13 @@ class FreenoveDevice:
             name
             for name in (
                 "attitude", "balance", "ball_start", "ball_state", "ball_stop",
+                "body_height",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
                 "head_horizontal", "head_vertical", "led_color", "led_mode", "position",
                 "move", "power", "rest", "servopower", "set_leg_joint_angles",
                 "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
                 "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
-                "stand", "stop", "timed_move", "walk",
+                "stand", "stop", "timed_move", "turn", "walk",
             )
         )
 

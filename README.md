@@ -169,13 +169,17 @@ robot.call("stop")
 robot.call("rest")
 # Walk forward for one second. Named directions avoid vendor-coordinate mistakes.
 robot.call("walk", "forward", 1.0)
+# Turn clockwise for one second.
+robot.call("turn", "clockwise", 1.0)
+# Use a named whole-body height.
+robot.call("body_height", "high")
 # Capture a frame without initializing or enabling the servos.
 image_path = robot.call("camera_capture", "view.jpg")
 ```
 
-Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move` method remains available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
+Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The default step is 15; explicit steps from 1 through 30 are available for experiments. Use `turn` with `clockwise` or `counterclockwise` for rotation, and `body_height` with `low`, `normal`, or `high` for named height changes. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move`, `position`, and `attitude` methods remain available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
 
-The bridge also exposes the capabilities from the previous `multimodal-hexapod-rpc.py` environment: buzzer and LED control, camera capture, ultrasonic distance, battery voltage, red-ball tracking, posture and head control, and per-leg position, servo-angle, and joint-angle control. Query `capabilities` for the authoritative method list:
+The bridge also exposes the complete capability surface from the previous `multimodal-hexapod-rpc.py` environment: both gait modes, bounded translation and rotation, speed, body position and attitude, IMU balance, camera-head control, buzzer and LED control, camera capture, ultrasonic distance, battery voltage, red-ball tracking, servo power, and per-leg position, servo-angle, and calibrated joint-angle control. Red-ball tracking processes fresh camera frames in memory and uses the former PID steering and distance controller, including backward motion when the ball is too close. Query `capabilities` for the authoritative method list:
 
 ```bash
 .venv/bin/acamp-robot call capabilities
