@@ -37,22 +37,18 @@ def arm(tmp_path):
 
 def test_arm_exposes_the_expected_public_capabilities(arm):
     expected = {
-        "status", "capabilities", "move_joint", "read_joint", "move_joints",
+        "status", "capabilities", "read_joint", "move_joints",
         "home", "stop", "rest", "torque", "led_color", "buzzer_on",
-        "buzzer_off", "camera_capture", "grip_object", "tool_position",
-        "move_preset", "pose_info", "target_step",
+        "buzzer_off", "camera_capture", "tool_position", "move_preset", "pose_info",
     }
     assert expected <= set(arm.capabilities())
+    assert {"move_joint", "grip_object", "target_step"}.isdisjoint(arm.capabilities())
 
 
 def test_single_and_all_joint_control_are_bounded(arm):
-    assert arm.move_joint(5, 265, 500) == 1
-    assert arm.read_joint(5) == 265
     assert arm.move_joints([90, 90, 90, 90, 265, 30], 1000) == 1
-    with pytest.raises(ValueError):
+    with pytest.raises(RobotError, match="Single-servo motion is disabled"):
         arm.move_joint(1, 181, 500)
-    with pytest.raises(ValueError):
-        arm.move_joint(5, 271, 500)
     with pytest.raises(ValueError):
         arm.move_joints([90] * 5, 500)
     with pytest.raises(ValueError):
@@ -86,8 +82,7 @@ def test_servo_commands_wait_until_physical_motion_finishes(tmp_path):
     waits = []
     arm = ArmController(library, command_interval=0.1, sleep=waits.append)
     arm.move_joints([90, 43, 36, 40, 90, 30], 1000)
-    arm.move_joint(6, 135, 500)
-    assert waits == [1.1, 0.6]
+    assert waits == [1.1]
 
 
 def test_led_and_buzzer_calls_are_bounded(arm):
@@ -103,13 +98,9 @@ def test_led_and_buzzer_calls_are_bounded(arm):
         arm.buzzer_on(101)
 
 
-def test_grip_width_uses_the_legacy_measured_lookup_table(arm):
-    result = arm.grip_object(3.0, 500)
-    assert result == {"width_cm": 3.0, "gripper_angle": 134}
-    assert arm.device.calls[-1] == ("move_one", 6, 134, 500)
-    assert arm.grip_object(6.4)["gripper_angle"] == 0
-    with pytest.raises(ValueError):
-        arm.grip_object(6.5)
+def test_standalone_grip_is_disabled_with_single_servo_motion(arm):
+    with pytest.raises(RobotError, match="Standalone grip_object is disabled"):
+        arm.grip_object(3.0, 500)
 
 
 def test_tool_position_matches_documented_home_geometry(arm):
@@ -287,12 +278,6 @@ def test_hexapod_transfer_poses_preserve_requested_base_and_grip(arm):
     assert result["joints"] == [75, 65, 30, 55, 265, 30]
 
 
-def test_target_step_uses_the_legacy_eleven_section_direction(arm):
-    left = arm.target_step(3)
-    assert left == {"target": "adjusting", "moved": True, "base_angle": 85}
-    right = arm.target_step(9)
-    assert right == {"target": "adjusting", "moved": True, "base_angle": 90}
-    assert arm.target_step(6) == {
-        "target": "centered", "moved": False, "base_angle": 90
-    }
-    assert arm.target_step("not_present") == {"target": "not_present", "moved": False}
+def test_target_step_is_disabled_with_single_servo_motion(arm):
+    with pytest.raises(RobotError, match="target_step is disabled"):
+        arm.target_step(3)

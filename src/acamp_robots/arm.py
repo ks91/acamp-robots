@@ -87,9 +87,9 @@ class ArmController:
 
     def capabilities(self) -> list[str]:
         return sorted(
-            ("buzzer_off", "buzzer_on", "camera_capture", "capabilities", "grip_object",
-             "hexapod_pose", "home", "led_color", "move_joint", "move_joints", "move_preset", "pose_info", "read_joint",
-             "rest", "sort_color", "sort_garbage", "status", "stop", "target_step", "tool_position", "torque")
+            ("buzzer_off", "buzzer_on", "camera_capture", "capabilities",
+             "hexapod_pose", "home", "led_color", "move_joints", "move_preset", "pose_info", "read_joint",
+             "rest", "sort_color", "sort_garbage", "status", "stop", "tool_position", "torque")
         )
 
     @classmethod
@@ -120,14 +120,11 @@ class ArmController:
         self.torque(True)
 
     def move_joint(self, joint: int, angle: int, duration_ms: int = 500) -> Any:
-        joint, angle = self._validate_joint(joint, angle)
-        duration_ms = self._validate_duration(duration_ms)
-        self._ensure_torque()
-        result = self.device.Arm_serial_servo_write(
-            joint, angle, duration_ms
+        raise RobotError(
+            "Single-servo motion is disabled because deployed DOFBOTs may route "
+            "the requested ID to a different physical joint; use a reviewed "
+            "six-joint pose or sorting task"
         )
-        self._settle_command(duration_ms)
-        return result
 
     def read_joint(self, joint: int) -> Any:
         joint, _ = self._validate_joint(joint, 0)
@@ -301,19 +298,10 @@ class ArmController:
         return str(destination)
 
     def grip_object(self, width_cm: float, duration_ms: int = 500) -> dict[str, Any]:
-        width_cm = float(width_cm)
-        if not 0 <= width_cm <= 6.4:
-            raise ValueError("width_cm must be between 0 and 6.4")
-        points = sorted(self.GRIP_WIDTHS)
-        lower = max(point for point in points if point <= width_cm)
-        upper = min(point for point in points if point >= width_cm)
-        if lower == upper:
-            angle = self.GRIP_WIDTHS[lower]
-        else:
-            ratio = (width_cm - lower) / (upper - lower)
-            angle = round(self.GRIP_WIDTHS[lower] + ratio * (self.GRIP_WIDTHS[upper] - self.GRIP_WIDTHS[lower]))
-        self.move_joint(6, angle, duration_ms)
-        return {"width_cm": width_cm, "gripper_angle": angle}
+        raise RobotError(
+            "Standalone grip_object is disabled with single-servo motion; use "
+            "sort_color or sort_garbage for the reviewed 3 cm box layouts"
+        )
 
     def tool_position(self, joints: list[int] | None = None) -> dict[str, float]:
         joints = joints or [int(self.read_joint(index)) for index in range(1, 7)]
@@ -381,20 +369,9 @@ class ArmController:
         return {"accepted": True, "pose": name, "joints": joints}
 
     def target_step(self, section: int | str, duration_ms: int = 300) -> dict[str, Any]:
-        """Move the base one bounded step toward an 11-section visual target."""
-        if str(section) == "not_present":
-            return {"target": "not_present", "moved": False}
-        section = int(section)
-        if not 1 <= section <= 11:
-            raise ValueError("section must be between 1 and 11 or 'not_present'")
-        current = int(self.read_joint(1))
-        delta = -5 if section < 6 else 5 if section > 6 else 0
-        if delta == 0:
-            return {"target": "centered", "moved": False, "base_angle": current}
-        angle = max(0, min(180, current + delta))
-        if angle != current:
-            self.move_joint(1, angle, duration_ms)
-        return {"target": "adjusting", "moved": angle != current, "base_angle": angle}
+        raise RobotError(
+            "target_step is disabled because it requires single-servo motion"
+        )
 
     def status(self) -> dict[str, Any]:
         return {

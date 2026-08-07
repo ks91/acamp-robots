@@ -156,16 +156,16 @@ DOFBOT example:
 
 ```python
 robot.home()
-robot.move_joint(1, 100, duration_ms=500)
 image_path = robot.camera_capture("view.jpg")
 robot.led_color(20, 0, 20)
-robot.grip_object(3.0)
 robot.rest()  # Disable servo torque.
 ```
 
 `home` moves to `[90, 90, 90, 90, 90, 180]`, with the arm upright and the gripper closed.
 
-DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer control, measured 0–6.4 cm object-width-to-gripper-angle conversion, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, parameterized Hexapod box-transfer poses through `hexapod_pose`, and five-degree visual-centering corrections through `target_step`. Every movement explicitly enables torque first, so a new CLI command works after a previous `rest` call. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
+DOFBOT supports joint-angle reads, bounded six-joint movement, buzzer control, forward-kinematics estimates through `tool_position`, the legacy color/garbage-sorting poses through `move_preset`, and parameterized Hexapod box-transfer poses through `hexapod_pose`. Every movement explicitly enables torque first, so a new CLI command works after a previous `rest` call. Joint 5 supports 0–270 degrees; the other joints support 0–180 degrees. Durations are restricted to 100–5000 ms.
+
+Single-servo motion is disabled. A deployed DOFBOT routed the documented servo ID 6 command to an arm joint instead of the gripper, so `move_joint`, standalone `grip_object`, and `target_step` are unavailable. Reviewed sorting tasks change the gripper through the known-working six-servo array API while preserving the preceding values for joints 1–5.
 
 The wrist camera moves with the arm. Two viewing poses are intentionally distinct:
 
@@ -174,7 +174,7 @@ The wrist camera moves with the arm. Two viewing poses are intentionally distinc
 
 Use `pose_info NAME` to inspect a pose's joints, purpose, and calculated tool position before moving. After changing the camera pose, capture a fresh image to verify the real view.
 
-The arm instruction module includes every color-sorting and garbage-sorting coordinate from the 01 environment, including inspection, pickup, lift, and each destination pose. These remain composable body knowledge rather than hard-coded tasks: the agent inspects a fresh camera image, reasons about the visible color or attached item, and constructs the requested manipulation from the named poses and measured gripper control.
+The arm instruction module includes every color-sorting and garbage-sorting coordinate from the 01 environment, including inspection, pickup, lift, and each destination pose. The standard tasks inspect a fresh camera image and use reviewed six-joint poses for the requested manipulation.
 
 The instructions also state general embodied-planning invariants for smaller models: contact precedes grasp, grasp precedes lift, arrival precedes release, and release precedes withdrawal. Grasping and release change only joint 6 while joints 1–5 hold the contact pose; they are never merged with lifting or withdrawal.
 
@@ -182,7 +182,7 @@ Every arm movement waits for its complete servo duration plus the vendor-require
 
 For the standard 3 cm camp boxes, `sort_color COLOR` and `sort_garbage CATEGORY` provide deterministic manipulation after visual classification. They enforce approach completion, joint-6-only grasp, lift, destination transfer, joint-6-only release, and return. A concurrent `stop` or `rest` creates a cross-process cancellation latch and disables torque before the next task movement.
 
-After the gripper has fully closed, sorting tasks add a separate 0.5-second beat before issuing the lift. The same beat separates release from withdrawal, making those physical states unambiguously sequential.
+After the gripper command has completed, sorting tasks add a separate 0.5-second beat before issuing the lift. The same beat separates release from withdrawal, making those physical states unambiguously sequential. Gripper steps use the six-servo array API with joints 1–5 unchanged; they never use the unreliable single-servo command.
 
 In a session started by `scripts/start-agent.sh`, the staff safety check applies to the whole session. The agent executes bounded DOFBOT movements and complete requested sorting sequences without asking the member for repeated safety confirmations between movements.
 

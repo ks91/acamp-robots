@@ -65,7 +65,7 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "hexapod_pose look|grab|drop BASE_ANGLE" in arm
     assert "`color_red` = `[117, 19, 66, 56, 90, 135]`" in arm
     assert "`garbage_recyclable` = `[27, 110, 0, 40, 265, 135]`" in arm
-    assert "pickup, grip, lift, destination, release, and return" in arm
+    assert "use the complete standard sorting task" in arm
     assert "Execute supported bounded arm requests directly without asking" in arm
     assert "Do not insert a new confirmation between stages" in arm
     assert "do not turn ordinary operation into a safety quiz" in arm
@@ -73,8 +73,9 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "close the gripper without moving the arm" in arm
     assert "A named pose is a body configuration" in arm
     assert "Never lift while first closing the gripper" in arm
-    assert "`move_preset color_grab`, then `move_joint 6 135`, then `move_preset color_lift`" in arm
-    assert "Never merge adjacent commands" in arm
+    assert "Single-servo motion is disabled" in arm
+    assert "Never call `move_joint`, `grip_object`, or `target_step`" in arm
+    assert "Do not reconstruct its grasp, lift, release, or withdrawal commands manually" in arm
     assert ".venv/bin/acamp-robot call sort_color COLOR" in arm
     assert ".venv/bin/acamp-robot call sort_garbage CATEGORY" in arm
     assert "do not reconstruct those mechanical sequences yourself" in arm
