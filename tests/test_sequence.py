@@ -38,12 +38,17 @@ def test_sequence_stops_after_a_step_failure():
     assert robot.calls[-1] == ("stop", ())
 
 
+def test_sequence_accepts_a_ten_second_walk_as_one_smooth_step():
+    steps = [{"call": "walk", "args": ["forward", 10]}]
+    assert validate_hexapod_sequence(steps)[0]["args"] == ["forward", 10]
+
+
 @pytest.mark.parametrize(
     "steps",
     [
         [{"call": "move", "args": [1, 0, 30, 0]}],
         [{"call": "set_leg_servo_angles", "args": [0, 90, 90, 90]}],
-        [{"call": "turn", "args": ["clockwise", 6]}],
+        [{"call": "turn", "args": ["clockwise", 31]}],
         [{"call": "position", "args": [0, 0, 0], "pause": 1.1}],
         [{"call": "position", "args": [0, 0, 0]}] * 41,
     ],

@@ -27,12 +27,8 @@ class HexapodController:
         }
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                long_running_methods = {"camera_capture", "turn_by"}
-                request_timeout = (
-                    max(self.timeout, 15.0)
-                    if method in long_running_methods
-                    else self.timeout
-                )
+                minimum_timeouts = {"camera_capture": 15.0, "turn_by": 35.0}
+                request_timeout = max(self.timeout, minimum_timeouts.get(method, 0.0))
                 client.settimeout(request_timeout)
                 client.connect(self.socket_path)
                 client.sendall(json.dumps(request).encode("utf-8") + b"\n")

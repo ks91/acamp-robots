@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 12
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 13
 
 
 class FakeThread:
@@ -184,12 +184,21 @@ def test_timed_move_stops_on_the_server_side():
     assert robot.status()["moving"] is False
 
 
-def test_timed_move_rejects_long_or_non_positive_duration():
+def test_timed_move_accepts_ten_seconds_without_splitting_the_motion():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.timed_move(10, gait=1, y=15)
+    robot._cancel_stop_timer()
+    assert result == {"accepted": True, "stop_after_seconds": 10.0}
+    assert control.command_queue == ["CMD_MOVE", "1", "0", "15", "8", "0"]
+
+
+def test_timed_move_rejects_unbounded_or_non_positive_duration():
     robot = MODULE.FreenoveDevice(FakeControl())
     with pytest.raises(ValueError):
         robot.timed_move(0)
     with pytest.raises(ValueError):
-        robot.timed_move(5.1)
+        robot.timed_move(30.1)
 
 
 @pytest.mark.parametrize(
@@ -286,7 +295,7 @@ def test_turn_by_integrates_z_gyro_and_stops_near_requested_relative_angle():
     assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
 
 
-def test_full_turn_is_split_into_two_independently_bounded_measured_segments():
+def test_full_turn_is_one_continuous_measured_motion():
     control = FakeControl()
     control.imu.sensor.gyro_z = 50.0
     robot = MODULE.FreenoveDevice(control)
@@ -303,12 +312,16 @@ def test_full_turn_is_split_into_two_independently_bounded_measured_segments():
     clock = Clock()
     robot._monotonic = clock
     robot._sleep = clock.sleep
-    result = robot.turn_by("clockwise", 360, max_seconds=5, sample_interval=0.1)
+    commands = []
+    original_queue = robot._queue
+    robot._queue = lambda *values: (commands.append([str(value) for value in values]), original_queue(*values))[1]
+    result = robot.turn_by("clockwise", 360, sample_interval=0.1)
     assert result["reached"] is True
     assert result["measured_degrees"] == pytest.approx(360)
-    assert [segment["target_degrees"] for segment in result["segments"]] == [180, 180]
-    assert all(segment["elapsed_seconds"] <= 5 for segment in result["segments"])
     assert result["elapsed_seconds"] > 5
+    moving_commands = [command for command in commands if command[0] == "CMD_MOVE"]
+    stops = [command for command in moving_commands if command[2:4] == ["0", "0"]]
+    assert len(stops) == 2  # initial normalization and final stop; none mid-turn
 
 
 def test_turn_by_times_out_and_stops_when_gyro_does_not_observe_rotation():
@@ -362,7 +375,7 @@ def test_turn_by_rejects_unbounded_angles_and_runtime():
         with pytest.raises(ValueError, match="degrees"):
             robot.turn_by("clockwise", degrees)
     with pytest.raises(ValueError, match="max_seconds"):
-        robot.turn_by("clockwise", 90, max_seconds=5.1)
+        robot.turn_by("clockwise", 90, max_seconds=30.1)
 
 
 def test_named_head_poses_and_leg_position_observation_are_available():

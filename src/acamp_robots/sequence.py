@@ -30,7 +30,7 @@ _ALLOWED_HEXAPOD_CALLS = {
 
 
 def validate_hexapod_sequence(
-    steps: Sequence[dict[str, Any]], *, max_steps: int = 40, max_seconds: float = 5.0
+    steps: Sequence[dict[str, Any]], *, max_steps: int = 40, max_seconds: float = 60.0
 ) -> list[dict[str, Any]]:
     """Validate a short semantic choreography without allowing raw motion calls."""
     if not isinstance(steps, (list, tuple)) or not 1 <= len(steps) <= max_steps:
@@ -51,14 +51,19 @@ def validate_hexapod_sequence(
             raise SequenceValidationError(f"step {index} pause must be between 0 and 1")
         if method in {"walk", "turn"}:
             duration = float(args[1]) if len(args) >= 2 else 1.0
-            if not 0 < duration <= 5:
-                raise SequenceValidationError(f"step {index} duration must be at most 5")
+            if not 0 < duration <= 30:
+                raise SequenceValidationError(f"step {index} duration must be at most 30")
             estimated_seconds += duration
         elif method == "turn_by":
-            max_seconds_arg = float(args[4]) if len(args) >= 5 else 5.0
-            if not 0 < max_seconds_arg <= 5:
+            degrees = float(args[1]) if len(args) >= 2 else 90.0
+            max_seconds_arg = (
+                float(args[4])
+                if len(args) >= 5
+                else max(5.0, min(30.0, degrees / 15.0))
+            )
+            if not 0 < max_seconds_arg <= 30:
                 raise SequenceValidationError(
-                    f"step {index} turn_by max_seconds must be at most 5"
+                    f"step {index} turn_by max_seconds must be at most 30"
                 )
             estimated_seconds += max_seconds_arg
         elif method == "perform":

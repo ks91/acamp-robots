@@ -6,7 +6,7 @@ import threading
 from acamp_robots.controller import HexapodController
 
 
-def test_turn_by_uses_timeout_longer_than_two_server_segments(monkeypatch):
+def test_turn_by_uses_timeout_longer_than_a_full_rotation(monkeypatch):
     observed = {}
 
     class FakeSocket:
@@ -19,7 +19,7 @@ def test_turn_by_uses_timeout_longer_than_two_server_segments(monkeypatch):
 
     monkeypatch.setattr(socket, "socket", lambda *args: FakeSocket())
     HexapodController("/tmp/test.sock", timeout=5).call("turn_by", "clockwise", 360)
-    assert observed["timeout"] == 15
+    assert observed["timeout"] == 35
 
 
 def test_rpc_call_uses_newline_json_protocol(tmp_path):

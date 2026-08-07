@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 12
+BRIDGE_PROTOCOL_VERSION = 13
 
 
 class _TrackingPID:
@@ -249,8 +249,8 @@ class FreenoveDevice:
 
     def timed_move(self, duration, gait=1, x=0, y=0, angle=0):
         duration = float(duration)
-        if not 0 < duration <= 5:
-            raise ValueError("duration must be greater than 0 and at most 5 seconds")
+        if not 0 < duration <= 30:
+            raise ValueError("duration must be greater than 0 and at most 30 seconds")
         with self._lock:
             self.move(gait=gait, x=x, y=y, angle=angle)
             self._stop_timer = threading.Timer(duration, self.stop)
@@ -358,7 +358,7 @@ class FreenoveDevice:
         degrees,
         angle=10,
         gait=1,
-        max_seconds=5.0,
+        max_seconds=None,
         sample_interval=0.02,
     ):
         """Turn through a measured relative angle by integrating Z-axis gyro rate."""
@@ -375,9 +375,11 @@ class FreenoveDevice:
         degrees = float(degrees)
         if not 0 < degrees <= 360:
             raise ValueError("degrees must be greater than 0 and at most 360")
+        if max_seconds is None:
+            max_seconds = max(5.0, min(30.0, degrees / 15.0))
         max_seconds = float(max_seconds)
-        if not 0 < max_seconds <= 5:
-            raise ValueError("max_seconds must be greater than 0 and at most 5")
+        if not 0 < max_seconds <= 30:
+            raise ValueError("max_seconds must be greater than 0 and at most 30")
         sample_interval = float(sample_interval)
         if not 0.01 <= sample_interval <= 0.1:
             raise ValueError("sample_interval must be between 0.01 and 0.1")
@@ -394,20 +396,12 @@ class FreenoveDevice:
         self._turn_by_stop.clear()
         self._turn_by_thread = threading.current_thread()
         canonical = "clockwise" if signs[normalized] > 0 else "counterclockwise"
-        targets = []
-        remaining_target = degrees
-        while remaining_target > 0:
-            target = min(180.0, remaining_target)
-            targets.append(target)
-            remaining_target -= target
-
         sensor = self.control.imu.sensor
         gyro_bias = float(getattr(self.control.imu, "error_gyro_data", {}).get("z", 0))
         measured = 0.0
         start = self._monotonic()
         reached = False
         reason = "timeout"
-        segments = []
         self._turn_by_state = {
             "active": True,
             "direction": canonical,
@@ -415,60 +409,33 @@ class FreenoveDevice:
             "measured_degrees": 0.0,
         }
         try:
-            for target in targets:
-                self._turn_by_stop.clear()
-                segment_start = last = self._monotonic()
-                segment_measured = 0.0
-                segment_reason = "timeout"
-                self.move(gait=gait, x=1, y=0, angle=signs[normalized] * angle)
-                try:
-                    while not self._turn_by_stop.is_set():
-                        self._sleep(sample_interval)
-                        now = self._monotonic()
-                        segment_elapsed = now - segment_start
-                        rate = abs(float(sensor.get_gyro_data()["z"]) - gyro_bias)
-                        if rate >= 1.5:
-                            delta = min(
-                                rate * max(0.0, now - last),
-                                target - segment_measured,
-                            )
-                            segment_measured += delta
-                            measured += delta
-                        last = now
-                        self._turn_by_state["measured_degrees"] = round(measured, 2)
-                        if segment_measured >= target:
-                            segment_reason = "target_reached"
-                            break
-                        if segment_elapsed >= max_seconds:
-                            break
-                        segment_remaining = target - segment_measured
-                        if segment_remaining < 30:
-                            reduced = max(
-                                3, min(angle, round(angle * segment_remaining / 30))
-                            )
-                            self.move(
-                                gait=gait,
-                                x=1,
-                                y=0,
-                                angle=signs[normalized] * reduced,
-                            )
-                finally:
-                    cancelled = self._turn_by_stop.is_set()
-                    self.stop()
-                segment = {
-                    "target_degrees": target,
-                    "measured_degrees": round(segment_measured, 2),
-                    "elapsed_seconds": round(self._monotonic() - segment_start, 3),
-                    "reached": segment_reason == "target_reached",
-                    "reason": "cancelled" if cancelled else segment_reason,
-                }
-                segments.append(segment)
-                if not segment["reached"]:
-                    reason = segment["reason"]
+            last = start
+            self.move(gait=gait, x=1, y=0, angle=signs[normalized] * angle)
+            while not self._turn_by_stop.is_set():
+                self._sleep(sample_interval)
+                now = self._monotonic()
+                elapsed = now - start
+                rate = abs(float(sensor.get_gyro_data()["z"]) - gyro_bias)
+                if rate >= 1.5:
+                    measured += min(
+                        rate * max(0.0, now - last), degrees - measured
+                    )
+                last = now
+                self._turn_by_state["measured_degrees"] = round(measured, 2)
+                if measured >= degrees:
+                    reached = True
+                    reason = "target_reached"
                     break
-            else:
-                reached = True
-                reason = "target_reached"
+                if elapsed >= max_seconds:
+                    break
+                remaining = degrees - measured
+                if remaining < 30:
+                    reduced = max(3, min(angle, round(angle * remaining / 30)))
+                    self.move(
+                        gait=gait, x=1, y=0, angle=signs[normalized] * reduced
+                    )
+            if self._turn_by_stop.is_set() and not reached:
+                reason = "cancelled"
         finally:
             self.stop()
             elapsed = self._monotonic() - start
@@ -490,7 +457,6 @@ class FreenoveDevice:
             "reached": reached,
             "reason": reason,
             "measurement": "integrated_mpu6050_z_gyro",
-            "segments": segments,
         }
 
     def body_height(self, level="normal"):
