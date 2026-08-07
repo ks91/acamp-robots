@@ -152,7 +152,8 @@ def test_known_preset_is_named_and_unknown_presets_are_rejected(arm):
 def test_camera_facing_and_work_area_poses_are_not_conflated(arm):
     forward = arm.pose_info("camera_forward")
     work_area = arm.pose_info("camera_work_area")
-    assert forward["joints"] == [90, 65, 115, 110, 90, 119]
+    assert forward["joints"] == [90, 60, 60, 60, 90, 180]
+    assert forward["tool"]["elevation_deg"] == 0
     assert work_area["joints"] == [90, 120, 0, 0, 90, 30]
     assert "face ahead" in forward["description"]
     assert "looking down toward the board" in work_area["description"]

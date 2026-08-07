@@ -23,7 +23,7 @@
 - Joint 1 controls horizontal direction: 90 degrees is directly forward, smaller is right, and larger is left.
 - Approximate end-effector elevation is `joint2 + joint3 + joint4 - 180` degrees. Near 0 is horizontal and forward.
 - The wrist camera is between joints 4 and 5, about 50.3 mm from the arm axis and 3.7 mm behind the wrist reference. It rotates with the base and follows end-effector pitch.
-- `camera_forward` is the empirically adjusted pose `[90, 65, 115, 110, 90, 119]` from physical testing. Map `前を向いて` and `カメラを前に向けて` to `move_preset camera_forward`. Do not replace it with a pose derived only from idealized end-effector geometry; camera mounting and real servo geometry matter.
+- `camera_forward` is `[90, 60, 60, 60, 90, 180]`: the base is centered, joints 2–4 total 180 degrees for a theoretical horizontal camera direction, the wrist is neutral, and the otherwise-unused gripper is closed. Map `前を向いて` and `カメラを前に向けて` to `move_preset camera_forward`.
 - `camera_work_area` is `[90, 120, 0, 0, 90, 30]`, aimed down toward the board for color inspection and red-ball tracking. Do not interchange it with `camera_forward`.
 - Use `.venv/bin/acamp-robot call pose_info POSE_NAME` when pose meaning or geometry is needed. After repositioning, capture a fresh image before claiming what the camera sees.
 

@@ -16,7 +16,7 @@ class ArmController:
     JOINT_LIMITS = ((0, 180), (0, 180), (0, 180), (0, 180), (0, 270), (0, 180))
     HOME = [90, 90, 90, 90, 90, 180]
     PRESETS = {
-        "camera_forward": [90, 65, 115, 110, 90, 119],
+        "camera_forward": [90, 60, 60, 60, 90, 180],
         "camera_work_area": [90, 120, 0, 0, 90, 30],
         "color_view": [90, 120, 0, 0, 90, 30],
         "color_grab": [90, 43, 36, 40, 90, 30],
@@ -35,8 +35,8 @@ class ArmController:
     }
     POSE_DESCRIPTIONS = {
         "camera_forward": (
-            "The empirically adjusted forward-facing camera pose from the legacy "
-            "robot; use it when the arm or camera should face ahead."
+            "The documented-geometry pose that makes the camera face ahead: base "
+            "centered, joints 2-4 totaling 180 degrees, wrist neutral, and gripper closed."
         ),
         "camera_work_area": (
             "The legacy camera pose for looking down toward the board and inspecting "

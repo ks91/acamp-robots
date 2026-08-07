@@ -169,7 +169,7 @@ DOFBOT also supports joint-angle reads, bounded six-joint movement, buzzer contr
 
 The wrist camera moves with the arm. Two viewing poses are intentionally distinct:
 
-- `camera_forward` (`[90, 65, 115, 110, 90, 119]`) is the empirically adjusted physical forward-camera pose.
+- `camera_forward` (`[90, 60, 60, 60, 90, 180]`) uses the documented joint geometry for a centered, theoretically horizontal forward-camera pose with the gripper closed.
 - `camera_work_area` (`[90, 120, 0, 0, 90, 30]`) looks down toward the board for color inspection and tracking.
 
 Use `pose_info NAME` to inspect a pose's joints, purpose, and calculated tool position before moving. After changing the camera pose, capture a fresh image to verify the real view.
