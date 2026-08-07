@@ -191,10 +191,10 @@ def test_color_sort_grasps_in_place_before_lifting(arm):
     assert motions == [
         ("move_all", [90, 90, 90, 90, 90, 180], 1000),
         ("move_all", [90, 43, 36, 40, 90, 30], 1000),
-        ("move_one", 6, 135, 500),
+        ("move_all", [90, 43, 36, 40, 90, 135], 500),
         ("move_all", [90, 80, 35, 40, 90, 135], 1000),
         ("move_all", [117, 19, 66, 56, 90, 135], 1000),
-        ("move_one", 6, 30, 500),
+        ("move_all", [117, 19, 66, 56, 90, 30], 500),
         ("move_all", [90, 90, 90, 90, 90, 180], 1000),
     ]
     assert result["completed"] == [
@@ -217,56 +217,19 @@ def test_sort_task_leaves_a_visible_beat_after_grasp_and_release(tmp_path):
     assert waits == [1.0, 1.0, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 1.0]
 
 
-@pytest.mark.parametrize(
-    ("method", "argument", "lift_pose"),
-    [
-        ("sort_color", "red", [90, 80, 35, 40, 90, 135]),
-        ("sort_garbage", "recyclable", [90, 80, 50, 50, 265, 135]),
-    ],
-)
-def test_sort_waits_for_the_gripper_to_reach_its_target_before_lifting(
-    arm, method, argument, lift_pose
+@pytest.mark.parametrize(("method", "argument"), [("sort_color", "red"), ("sort_garbage", "recyclable")])
+def test_sort_gripper_steps_use_the_six_servo_api_without_changing_joints_1_to_5(
+    arm, method, argument
 ):
-    events = []
-    readings = iter([80, 120, 134])
-    original_write_all = arm.device.Arm_serial_servo_write6_array
-
-    def read_joint(servo):
-        if servo == 6:
-            value = next(readings, arm.device.angles[5])
-            events.append(("read_gripper", value))
-            return value
-        return arm.device.angles[servo - 1]
-
-    def write_all(joints, duration):
-        events.append(("move_all", list(joints)))
-        return original_write_all(joints, duration)
-
-    arm.device.Arm_serial_servo_read = read_joint
-    arm.device.Arm_serial_servo_write6_array = write_all
-    arm.gripper_poll_seconds = 0
-
     getattr(arm, method)(argument)
-
-    lift_index = events.index(("move_all", lift_pose))
-    assert events[:lift_index][-3:] == [
-        ("read_gripper", 80),
-        ("read_gripper", 120),
-        ("read_gripper", 134),
-    ]
-
-
-def test_sort_does_not_lift_when_the_gripper_cannot_confirm_its_position(arm):
-    arm.device.Arm_serial_servo_read = lambda _servo: 30
-    arm.gripper_poll_seconds = 0
-    arm.gripper_settle_timeout = 0
-
-    with pytest.raises(RobotError, match="gripper did not reach"):
-        arm.sort_color("red")
-
     motions = [call for call in arm.device.calls if call[0].startswith("move_")]
-    assert motions[-1] == ("move_one", 6, 135, 500)
-    assert arm.device.calls[-1] == ("torque", 0)
+    grasp = motions[2]
+    release = motions[5]
+    assert grasp[0] == release[0] == "move_all"
+    assert grasp[1][:5] == motions[1][1][:5]
+    assert release[1][:5] == motions[4][1][:5]
+    assert grasp[1][5] == 135
+    assert release[1][5] == 30
 
 
 def test_garbage_sort_uses_classified_destination(arm):
@@ -274,10 +237,10 @@ def test_garbage_sort_uses_classified_destination(arm):
     motions = [call for call in arm.device.calls if call[0].startswith("move_")]
     assert motions[1:6] == [
         ("move_all", [90, 40, 30, 67, 265, 30], 1000),
-        ("move_one", 6, 135, 500),
+        ("move_all", [90, 40, 30, 67, 265, 135], 500),
         ("move_all", [90, 80, 50, 50, 265, 135], 1000),
         ("move_all", [27, 110, 0, 40, 265, 135], 1000),
-        ("move_one", 6, 30, 500),
+        ("move_all", [27, 110, 0, 40, 265, 30], 500),
     ]
 
 

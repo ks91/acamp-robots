@@ -66,9 +66,6 @@ class ArmController:
         sleep: Callable[[float], None] = time.sleep,
         task_stop_file: Path | None = None,
         task_beat_seconds: float = 0.5,
-        gripper_settle_timeout: float = 2.0,
-        gripper_poll_seconds: float = 0.1,
-        gripper_angle_tolerance: int = 3,
     ):
         if not library_path.is_file():
             raise RobotError(f"Arm_Lib.py was not found: {library_path}")
@@ -86,9 +83,6 @@ class ArmController:
         self._sleep = sleep
         self.task_stop_file = task_stop_file or Path("/tmp/acamp-arm-task-stop")
         self.task_beat_seconds = max(0.0, float(task_beat_seconds))
-        self.gripper_settle_timeout = max(0.0, float(gripper_settle_timeout))
-        self.gripper_poll_seconds = max(0.0, float(gripper_poll_seconds))
-        self.gripper_angle_tolerance = max(0, int(gripper_angle_tolerance))
         self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
@@ -178,32 +172,19 @@ class ArmController:
         self.move_preset(name, duration_ms)
         self._check_task_cancelled()
 
-    def _task_gripper(self, angle: int, duration_ms: int = 500):
+    def _task_gripper_at_pose(
+        self, pose: list[int], angle: int, duration_ms: int = 500
+    ):
+        """Change the task gripper through the known-working six-servo API.
+
+        Some deployed Arm_Lib/device combinations route the nominal single-servo
+        ID 6 command to an arm joint. Re-sending the current task pose with only
+        its sixth value changed preserves joints 1-5 while avoiding that path.
+        """
         self._check_task_cancelled()
-        self.move_joint(6, angle, duration_ms)
-        attempts = max(
-            1,
-            math.ceil(
-                self.gripper_settle_timeout / max(self.gripper_poll_seconds, 0.001)
-            ),
-        )
-        last_angle = None
-        for attempt in range(attempts):
-            self._check_task_cancelled()
-            last_angle = self.read_joint(6)
-            try:
-                reached = abs(int(last_angle) - int(angle)) <= self.gripper_angle_tolerance
-            except (TypeError, ValueError):
-                reached = False
-            if reached:
-                break
-            if attempt + 1 < attempts:
-                self._sleep(self.gripper_poll_seconds)
-        else:
-            raise RobotError(
-                f"Arm gripper did not reach {angle} degrees "
-                f"(last reading: {last_angle!r})"
-            )
+        joints = list(pose)
+        joints[5] = self._validate_joint(6, angle)[1]
+        self.move_joints(joints, duration_ms)
         self._check_task_cancelled()
 
     def _task_beat(self):
@@ -219,16 +200,17 @@ class ArmController:
             self.home()
             self._check_task_cancelled()
             completed.append("home")
+            grab_pose = self.PRESETS[f"{layout}_grab"]
             self._task_move_preset(f"{layout}_grab")
             completed.append("approach")
-            self._task_gripper(135)
+            self._task_gripper_at_pose(grab_pose, 135)
             completed.append("grasp")
             self._task_beat()
             self._task_move_preset(f"{layout}_lift")
             completed.append("lift")
             self._task_move_preset(destination)
             completed.append("carry")
-            self._task_gripper(30)
+            self._task_gripper_at_pose(self.PRESETS[destination], 30)
             completed.append("release")
             self._task_beat()
             self._check_task_cancelled()
