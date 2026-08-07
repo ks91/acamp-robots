@@ -175,6 +175,9 @@ robot.call("turn", "clockwise", 1.0)
 robot.call("body_height", "high")
 # Run a short, stoppable whole-body performance.
 robot.call("perform", "rock_and_roll")
+# Lift only human-numbered leg 1, then return it to its saved position.
+robot.call("lift_leg", 1)
+robot.call("lower_leg", 1)
 # Capture a frame without initializing or enabling the servos.
 image_path = robot.call("camera_capture", "view.jpg")
 ```
@@ -184,6 +187,8 @@ Use `forward`, `backward`, `left`, or `right` for participant-facing movement. T
 The bridge also exposes the complete capability surface from the previous `multimodal-hexapod-rpc.py` environment: both gait modes, bounded translation and rotation, speed, body position and attitude, IMU balance, camera-head control, buzzer and LED control, camera capture, ultrasonic distance, battery voltage, red-ball tracking, servo power, and per-leg position, servo-angle, and calibrated joint-angle control. Red-ball tracking processes fresh camera frames in memory and retains the former HSV threshold, contour-centroid calculation, and PID steering and distance controller. It smooths center and radius measurements, tolerates three consecutively dropped detections, and uses center and distance deadbands to avoid stop-start motion while still backing away when the ball is too close. Tracking telemetry is included in `status` for physical tuning.
 
 Short expressive performances are available through `perform`: `nod`, `sway`, `bounce`, `curious`, `happy`, `thinking`, and `rock_and_roll`. They use bounded posture and head movements, finish in neutral posture, and can be interrupted by `stop`. Query `capabilities` for the authoritative method list:
+
+Individual legs use human-facing numbers 1–6. `lift_leg LEG [LIFT]` raises only that leg by a bounded relative amount (default 30, range 5–40) and saves its previous position. `lower_leg LEG` restores it, while `lower_all_legs` restores every leg raised through this semantic API. Whole-body posture commands supersede those saved positions.
 
 ```bash
 .venv/bin/acamp-robot call capabilities

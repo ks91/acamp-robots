@@ -77,6 +77,9 @@ def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
     assert "ball_start" in hexapod and "ball_stop" in hexapod
     assert ".venv/bin/acamp-robot call perform rock_and_roll" in hexapod
     assert "Do not refuse an imaginative request merely because it is imaginative" in hexapod
+    assert ".venv/bin/acamp-robot call lift_leg LEG_NUMBER" in hexapod
+    assert "1番の脚" in hexapod
+    assert ".venv/bin/acamp-robot call lower_leg LEG_NUMBER" in hexapod
 
 
 def test_camp_template_contains_operational_sections():

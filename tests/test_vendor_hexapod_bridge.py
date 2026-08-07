@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 9
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 10
 
 
 class FakeThread:
@@ -40,6 +40,15 @@ class FakeControl:
         self.servo = FakeServo()
         self.command_queue = []
         self.timeout = 0
+        self.leg_positions = [[140, 0, -30] for _ in range(6)]
+        self.calibration_angles = [[0, 0, 0] for _ in range(6)]
+        self.set_leg_angles_calls = 0
+
+    def check_point_validity(self):
+        return True
+
+    def set_leg_angles(self):
+        self.set_leg_angles_calls += 1
 
 
 def test_bridge_preserves_the_legacy_hexapod_api_surface():
@@ -58,7 +67,8 @@ def test_bridge_preserves_the_legacy_hexapod_api_surface():
 def test_bridge_exposes_complete_semantic_motion_surface():
     capabilities = set(MODULE.FreenoveDevice(FakeControl()).capabilities())
     assert {
-        "walk", "turn", "body_height", "perform", "stand", "stop", "rest"
+        "walk", "turn", "body_height", "perform", "lift_leg", "lower_leg",
+        "lower_all_legs", "stand", "stop", "rest"
     } <= capabilities
 
 
@@ -206,6 +216,45 @@ def test_body_height_exposes_named_bounded_postures(level, expected_z):
     result = robot.body_height(level)
     assert control.command_queue == ["CMD_POSITION", "0", "0", expected_z]
     assert result == {"accepted": True, "height": level, "z": int(expected_z)}
+
+
+def test_lift_leg_maps_human_leg_one_to_vendor_index_zero_and_moves_only_it():
+    control = FakeControl()
+    before = [list(position) for position in control.leg_positions]
+    robot = MODULE.FreenoveDevice(control)
+    result = robot.lift_leg(1)
+    assert result == {"accepted": True, "leg": 1, "lift": 30}
+    assert control.leg_positions[0] == [140, 0, 0]
+    assert control.leg_positions[1:] == before[1:]
+    assert control.set_leg_angles_calls == 1
+
+
+def test_lower_leg_restores_the_position_saved_before_lifting():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    robot.lift_leg(6, 20)
+    result = robot.lower_leg(6)
+    assert result == {"accepted": True, "leg": 6, "lowered": True}
+    assert control.leg_positions[5] == [140, 0, -30]
+
+
+def test_leg_semantics_reject_bad_numbers_and_unsafe_lift_sizes():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    for leg in (0, 7):
+        with pytest.raises(ValueError, match="leg must be between 1 and 6"):
+            robot.lift_leg(leg)
+    for lift in (4, 41):
+        with pytest.raises(ValueError, match="lift must be between 5 and 40"):
+            robot.lift_leg(1, lift)
+
+
+def test_lower_all_legs_restores_every_saved_position():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    robot.lift_leg(1)
+    robot.lift_leg(4, 20)
+    assert robot.lower_all_legs() == {"accepted": True, "lowered_legs": [1, 4]}
+    assert control.leg_positions == [[140, 0, -30] for _ in range(6)]
 
 
 def test_ball_controller_advances_when_far_and_retreats_when_too_close():

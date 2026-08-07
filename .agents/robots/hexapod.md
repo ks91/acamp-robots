@@ -34,9 +34,16 @@
 - Map requests for a rock-and-roll movement, including `ロックンロールな動き`, to `.venv/bin/acamp-robot call perform rock_and_roll`. Other built-in short performances are `nod`, `sway`, `bounce`, `curious`, `happy`, and `thinking`; query `capabilities` and use `perform STYLE` rather than improvising unbounded shell-side sleeps.
 - For a new creative movement, help the member make a tested behavior under `skills/` from bounded `position`, `attitude`, head, `walk`, and `turn` calls. Decline only the unsafe part of a request, not creativity itself.
 
+## Individual legs
+
+- Human-facing leg numbers are 1 through 6 and map directly to Freenove leg indices 0 through 5. Never pass a participant's 1-based number directly to a zero-based low-level leg method.
+- Map requests such as `1番の脚だけ上げて` or “lift leg 1” to `.venv/bin/acamp-robot call lift_leg LEG_NUMBER`. The default lift is 30; an explicitly requested lift may be 5–40. This semantic call stops walking or tracking first, changes only that leg, and remembers its prior position.
+- Map `1番の脚を下ろして` to `.venv/bin/acamp-robot call lower_leg LEG_NUMBER`. Map requests to lower every raised leg to `lower_all_legs`. These restore the positions saved by `lift_leg`.
+- Whole-body `position`, `attitude`, `stand`, or performance changes supersede saved individual-leg positions. After one of those actions, make a fresh `lift_leg` request rather than trying to restore stale coordinates.
+
 ## Camera and peripherals
 
 - Camera capture is available while `hardware_initialized` is false and must not initialize or enable servos. Do not move the robot merely to answer a visual question unless asked for a different view.
 - Map a request to follow or chase the red ball to `ball_start`; it centers the head and continuously steers and moves both forward and backward to maintain its target distance. Its color threshold, contour centroid, and PID gains deliberately match the proven 01 implementation. Map requests to stop following to `ball_stop`, and use `ball_state` to inspect the tracker. Do not replace these with repeated camera captures or agent-generated movement commands.
 - The RPC surface also provides ultrasonic distance (`sonic`), battery voltage (`power`), static RGB color (`led_color`), LED effects (`led_mode`), buzzer control, camera capture, red-ball tracking, head and whole-body posture control, balance, and per-leg position and angle control. Query `capabilities` rather than guessing method names.
-- Manual per-leg calls are for deliberately programmed, reviewed behaviors only. Stop walking and ball tracking before using them; do not use raw servo angles for ordinary participant language.
+- `lift_leg`, `lower_leg`, and `lower_all_legs` are routine semantic controls. Other manual per-leg calls are for deliberately programmed, reviewed behaviors only. Stop walking and ball tracking before using them; do not use raw servo angles for ordinary participant language.

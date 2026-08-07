@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 9
+BRIDGE_PROTOCOL_VERSION = 10
 
 
 class _TrackingPID:
@@ -121,6 +121,7 @@ class FreenoveDevice:
         self._reset_ball_pid()
         self._performance_stop = threading.Event()
         self._performance_lock = threading.Lock()
+        self._lifted_leg_positions = {}
 
     @property
     def hardware_initialized(self):
@@ -330,10 +331,12 @@ class FreenoveDevice:
 
     def position(self, x=0, y=0, z=0):
         with self._lock:
+            self._lifted_leg_positions.clear()
             self._queue("CMD_POSITION", int(x), int(y), int(z))
 
     def attitude(self, roll=0, pitch=0, yaw=0):
         with self._lock:
+            self._lifted_leg_positions.clear()
             self._queue("CMD_ATTITUDE", int(roll), int(pitch), int(yaw))
 
     def head_vertical(self, angle=90):
@@ -571,6 +574,69 @@ class FreenoveDevice:
         if self._moving or self._ball_active:
             raise RuntimeError("Stop movement and ball tracking before manual leg control")
 
+    @staticmethod
+    def _human_leg_index(leg):
+        leg = int(leg)
+        if not 1 <= leg <= 6:
+            raise ValueError("leg must be between 1 and 6")
+        return leg - 1
+
+    def _prepare_semantic_leg_control(self):
+        if self._ball_active:
+            self.ball_stop()
+        if self._moving:
+            self.stop()
+            # Let Freenove's condition monitor consume the stop before a direct
+            # leg update replaces its gait-generated joint angles.
+            time.sleep(0.15)
+
+    def lift_leg(self, leg, lift=30):
+        """Lift one human-numbered leg relative to its current resting point."""
+        leg_index = self._human_leg_index(leg)
+        lift = int(lift)
+        if not 5 <= lift <= 40:
+            raise ValueError("lift must be between 5 and 40")
+        self._prepare_semantic_leg_control()
+        self._ensure_manual_leg_allowed()
+        original = self._lifted_leg_positions.get(
+            leg_index, list(self.control.leg_positions[leg_index])
+        )
+        newly_saved = leg_index not in self._lifted_leg_positions
+        if newly_saved:
+            self._lifted_leg_positions[leg_index] = list(original)
+        try:
+            self.set_leg_position(
+                leg_index, original[0], original[1], original[2] + lift
+            )
+        except Exception:
+            if newly_saved:
+                self._lifted_leg_positions.pop(leg_index, None)
+            raise
+        return {"accepted": True, "leg": leg_index + 1, "lift": lift}
+
+    def lower_leg(self, leg):
+        """Return one lifted human-numbered leg to its saved position."""
+        leg_index = self._human_leg_index(leg)
+        self._prepare_semantic_leg_control()
+        original = self._lifted_leg_positions.pop(leg_index, None)
+        if original is None:
+            return {"accepted": True, "leg": leg_index + 1, "lowered": False}
+        try:
+            self.set_leg_position(leg_index, *original)
+        except Exception:
+            self._lifted_leg_positions[leg_index] = original
+            raise
+        return {"accepted": True, "leg": leg_index + 1, "lowered": True}
+
+    def lower_all_legs(self):
+        """Return every semantically lifted leg to its saved position."""
+        lowered = []
+        for leg_index in sorted(tuple(self._lifted_leg_positions)):
+            result = self.lower_leg(leg_index + 1)
+            if result["lowered"]:
+                lowered.append(leg_index + 1)
+        return {"accepted": True, "lowered_legs": lowered}
+
     def set_leg_position(self, leg_index, x, y, z):
         self._ensure_manual_leg_allowed()
         leg_index = int(leg_index)
@@ -662,8 +728,9 @@ class FreenoveDevice:
                 "attitude", "balance", "ball_start", "ball_state", "ball_stop",
                 "body_height",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
-                "head_horizontal", "head_vertical", "led_color", "led_mode", "position",
-                "move", "perform", "power", "rest", "servopower", "set_leg_joint_angles",
+                "head_horizontal", "head_vertical", "led_color", "led_mode", "lift_leg",
+                "lower_all_legs", "lower_leg", "position", "move", "perform", "power",
+                "rest", "servopower", "set_leg_joint_angles",
                 "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
                 "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
                 "stand", "stop", "timed_move", "turn", "walk",
