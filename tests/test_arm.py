@@ -202,6 +202,21 @@ def test_color_sort_grasps_in_place_before_lifting(arm):
     ]
 
 
+def test_sort_task_leaves_a_visible_beat_after_grasp_and_release(tmp_path):
+    library = tmp_path / "Arm_Lib.py"
+    make_library(library)
+    waits = []
+    arm = ArmController(
+        library,
+        command_interval=0,
+        sleep=waits.append,
+        task_stop_file=tmp_path / "task-stop",
+        task_beat_seconds=0.5,
+    )
+    arm.sort_color("red")
+    assert waits == [1.0, 1.0, 0.5, 0.5, 1.0, 1.0, 0.5, 0.5, 1.0]
+
+
 def test_garbage_sort_uses_classified_destination(arm):
     arm.sort_garbage("recyclable")
     motions = [call for call in arm.device.calls if call[0].startswith("move_")]

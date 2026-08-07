@@ -65,6 +65,7 @@ class ArmController:
         command_interval: float = 0.1,
         sleep: Callable[[float], None] = time.sleep,
         task_stop_file: Path | None = None,
+        task_beat_seconds: float = 0.5,
     ):
         if not library_path.is_file():
             raise RobotError(f"Arm_Lib.py was not found: {library_path}")
@@ -81,6 +82,7 @@ class ArmController:
         self.command_interval = max(0.0, float(command_interval))
         self._sleep = sleep
         self.task_stop_file = task_stop_file or Path("/tmp/acamp-arm-task-stop")
+        self.task_beat_seconds = max(0.0, float(task_beat_seconds))
         self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
@@ -175,6 +177,11 @@ class ArmController:
         self.move_joint(6, angle, duration_ms)
         self._check_task_cancelled()
 
+    def _task_beat(self):
+        self._check_task_cancelled()
+        self._sleep(self.task_beat_seconds)
+        self._check_task_cancelled()
+
     def _run_sort_task(self, layout: str, destination: str) -> dict[str, Any]:
         self._start_task()
         completed = []
@@ -187,12 +194,14 @@ class ArmController:
             completed.append("approach")
             self._task_gripper(135)
             completed.append("grasp")
+            self._task_beat()
             self._task_move_preset(f"{layout}_lift")
             completed.append("lift")
             self._task_move_preset(destination)
             completed.append("carry")
             self._task_gripper(30)
             completed.append("release")
+            self._task_beat()
             self._check_task_cancelled()
             self.home()
             self._check_task_cancelled()
