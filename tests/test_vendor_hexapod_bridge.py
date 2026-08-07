@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 11
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 12
 
 
 class FakeThread:
@@ -148,6 +148,21 @@ def test_rest_stops_motion_and_disables_servo_power():
     assert robot.status()["servo_power"] is False
 
 
+def test_emergency_stop_cancels_activity_and_disables_servo_power():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    robot.servopower(True)
+    robot._ball_active = True
+    robot._ball_tracking = True
+    result = robot.emergency_stop()
+    assert result == {"accepted": True, "servo_power": False}
+    assert robot._ball_stop.is_set()
+    assert robot._performance_stop.is_set()
+    assert robot._turn_by_stop.is_set()
+    assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
+    assert control.servo_power_disable.value == "on"
+
+
 def test_rest_does_not_initialize_hardware_when_already_resting():
     robot = MODULE.FreenoveDevice(server_dir="/vendor/not-needed")
     assert robot.rest() == {
@@ -269,6 +284,31 @@ def test_turn_by_integrates_z_gyro_and_stops_near_requested_relative_angle():
     assert result["measured_degrees"] == pytest.approx(90)
     assert result["direction"] == "clockwise"
     assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
+
+
+def test_full_turn_is_split_into_two_independently_bounded_measured_segments():
+    control = FakeControl()
+    control.imu.sensor.gyro_z = 50.0
+    robot = MODULE.FreenoveDevice(control)
+
+    class Clock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+        def sleep(self, duration):
+            self.value += duration
+
+    clock = Clock()
+    robot._monotonic = clock
+    robot._sleep = clock.sleep
+    result = robot.turn_by("clockwise", 360, max_seconds=5, sample_interval=0.1)
+    assert result["reached"] is True
+    assert result["measured_degrees"] == pytest.approx(360)
+    assert [segment["target_degrees"] for segment in result["segments"]] == [180, 180]
+    assert all(segment["elapsed_seconds"] <= 5 for segment in result["segments"])
+    assert result["elapsed_seconds"] > 5
 
 
 def test_turn_by_times_out_and_stops_when_gyro_does_not_observe_rotation():

@@ -7,7 +7,7 @@ SOCKET="${HEXAPOD_RPC_SOCKET:-/tmp/acamp-hexapod.sock}"
 PID_FILE="${HEXAPOD_RPC_PID_FILE:-/tmp/acamp-hexapod-rpc.pid}"
 LOG_FILE="${HEXAPOD_RPC_LOG:-/tmp/acamp-hexapod-rpc.log}"
 BRIDGE="$ROOT_DIR/scripts/vendor_hexapod_bridge.py"
-BRIDGE_PROTOCOL_VERSION=11
+BRIDGE_PROTOCOL_VERSION=12
 SYSTEMD_UNIT="acamp-hexapod-rpc"
 
 if [[ -n "${HEXAPOD_SERVER_DIR:-}" ]]; then
@@ -123,6 +123,7 @@ case "$ACTION" in
         --service-type=exec \
         --property=Restart=on-failure \
         --property=RestartSec=1 \
+        --property="ExecStopPost=$ROOT_DIR/scripts/hexapod-servo-off.sh" \
         --property="StandardOutput=append:$LOG_FILE" \
         --property="StandardError=append:$LOG_FILE" \
         --working-directory="$SERVER_DIR" \
@@ -157,5 +158,22 @@ case "$ACTION" in
     fi
     cleanup_stale_files
     ;;
-  *) echo "Usage: $0 start|status|stop" >&2; exit 2 ;;
+  emergency-stop)
+    python3 - "$SOCKET" <<'PY' || true
+import json
+import socket
+import sys
+try:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(1)
+        client.connect(sys.argv[1])
+        client.sendall(b'{"id":"emergency","method":"emergency_stop","args":[],"kwargs":{}}\n')
+        client.recv(4096)
+except OSError:
+    raise SystemExit(1)
+PY
+    "$ROOT_DIR/scripts/hexapod-servo-off.sh"
+    echo "Hexapod motion stopped and servo power disabled."
+    ;;
+  *) echo "Usage: $0 start|status|stop|emergency-stop" >&2; exit 2 ;;
 esac

@@ -6,6 +6,22 @@ import threading
 from acamp_robots.controller import HexapodController
 
 
+def test_turn_by_uses_timeout_longer_than_two_server_segments(monkeypatch):
+    observed = {}
+
+    class FakeSocket:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def settimeout(self, value): observed["timeout"] = value
+        def connect(self, path): pass
+        def sendall(self, payload): pass
+        def recv(self, size): return b'{"id":1,"ok":true,"result":{}}\n'
+
+    monkeypatch.setattr(socket, "socket", lambda *args: FakeSocket())
+    HexapodController("/tmp/test.sock", timeout=5).call("turn_by", "clockwise", 360)
+    assert observed["timeout"] == 15
+
+
 def test_rpc_call_uses_newline_json_protocol(tmp_path):
     # macOS limits AF_UNIX paths to about 100 bytes; pytest's tmp path can exceed it.
     path = f"/tmp/acamp-rpc-test-{os.getpid()}.sock"

@@ -22,9 +22,9 @@
 - Never infer vendor coordinates from language. Freenove uses positive `y` for forward and positive `x` for right, but that mapping belongs inside `walk`.
 - Use `.venv/bin/acamp-robot call turn DIRECTION DURATION` for named rotation. Map `時計回り`, `右回り`, and clockwise rotation to direction `clockwise`; map `反時計回り`, `左回り`, and counterclockwise rotation to `counterclockwise`. The default angle is 10 and the accepted range is 1–20. Do not emulate turning with left or right translation.
 - Use `.venv/bin/acamp-robot call turn_by DIRECTION DEGREES` when a member requests a relative angle, such as `180度時計回りに回転して` or `真後ろを向いて`. `turn_by clockwise 180` integrates the MPU6050 Z-axis gyro, slows near the target, stops on success or after at most five seconds, and reports the measured relative angle and whether it reached the target. Do not translate 180 degrees into the low-level gait-angle parameter.
-- `turn_by` measures a relative angle, not an absolute room direction. MPU6050 has no magnetometer and does not provide an absolute compass heading. For repeatable room-relative directions, build a research behavior using camera markers or another external reference and use `turn_by` only for bounded corrections.
+- `turn_by` measures a relative angle, not an absolute room direction. Requests above 180 degrees are automatically split into independently stopped, gyro-measured segments. MPU6050 has no magnetometer and does not provide an absolute compass heading. For repeatable room-relative directions, build a research behavior using camera markers or another external reference and use `turn_by` only for bounded corrections.
 - Use `timed_move` only for tested behaviors requiring explicit coordinates. Never implement short movement as separate `move`, sleep, and `stop` agent commands.
-- If the bridge disconnects during motion, use the physical power switch or `CAMP.md` emergency procedure rather than relying on another RPC request.
+- If motion is unexpected, run `scripts/hexapod-rpc.sh emergency-stop`. It first requests an RPC stop and then independently drives Freenove's active-high GPIO 4 servo-disable line, so it does not depend on a healthy bridge. If that command fails or the Pi is unreachable, use the physical power switch immediately and call staff. Never retry the movement first.
 
 ## Body, head, and expressive posture
 

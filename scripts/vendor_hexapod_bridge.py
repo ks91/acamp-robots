@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 11
+BRIDGE_PROTOCOL_VERSION = 12
 
 
 class _TrackingPID:
@@ -159,6 +159,17 @@ class FreenoveDevice:
 
     def rest(self):
         """Stop all motion and disable servo power without initializing hardware."""
+        if not self.hardware_initialized:
+            self._servo_power = False
+            return {"accepted": True, "servo_power": False, "already_resting": True}
+        self.servopower(False)
+        return {"accepted": True, "servo_power": False}
+
+    def emergency_stop(self):
+        """Cancel every activity, stop gait, and remove servo torque."""
+        self._ball_stop.set()
+        self._performance_stop.set()
+        self._turn_by_stop.set()
         if not self.hardware_initialized:
             self._servo_power = False
             return {"accepted": True, "servo_power": False, "already_resting": True}
@@ -383,12 +394,20 @@ class FreenoveDevice:
         self._turn_by_stop.clear()
         self._turn_by_thread = threading.current_thread()
         canonical = "clockwise" if signs[normalized] > 0 else "counterclockwise"
+        targets = []
+        remaining_target = degrees
+        while remaining_target > 0:
+            target = min(180.0, remaining_target)
+            targets.append(target)
+            remaining_target -= target
+
         sensor = self.control.imu.sensor
         gyro_bias = float(getattr(self.control.imu, "error_gyro_data", {}).get("z", 0))
         measured = 0.0
-        start = last = self._monotonic()
+        start = self._monotonic()
         reached = False
         reason = "timeout"
+        segments = []
         self._turn_by_state = {
             "active": True,
             "direction": canonical,
@@ -396,30 +415,60 @@ class FreenoveDevice:
             "measured_degrees": 0.0,
         }
         try:
-            self.move(gait=gait, x=1, y=0, angle=signs[normalized] * angle)
-            while not self._turn_by_stop.is_set():
-                self._sleep(sample_interval)
-                now = self._monotonic()
-                elapsed = now - start
-                rate = abs(float(sensor.get_gyro_data()["z"]) - gyro_bias)
-                if rate >= 1.5:
-                    measured += rate * max(0.0, now - last)
-                last = now
-                self._turn_by_state["measured_degrees"] = round(measured, 2)
-                if measured >= degrees:
-                    reached = True
-                    reason = "target_reached"
+            for target in targets:
+                self._turn_by_stop.clear()
+                segment_start = last = self._monotonic()
+                segment_measured = 0.0
+                segment_reason = "timeout"
+                self.move(gait=gait, x=1, y=0, angle=signs[normalized] * angle)
+                try:
+                    while not self._turn_by_stop.is_set():
+                        self._sleep(sample_interval)
+                        now = self._monotonic()
+                        segment_elapsed = now - segment_start
+                        rate = abs(float(sensor.get_gyro_data()["z"]) - gyro_bias)
+                        if rate >= 1.5:
+                            delta = min(
+                                rate * max(0.0, now - last),
+                                target - segment_measured,
+                            )
+                            segment_measured += delta
+                            measured += delta
+                        last = now
+                        self._turn_by_state["measured_degrees"] = round(measured, 2)
+                        if segment_measured >= target:
+                            segment_reason = "target_reached"
+                            break
+                        if segment_elapsed >= max_seconds:
+                            break
+                        segment_remaining = target - segment_measured
+                        if segment_remaining < 30:
+                            reduced = max(
+                                3, min(angle, round(angle * segment_remaining / 30))
+                            )
+                            self.move(
+                                gait=gait,
+                                x=1,
+                                y=0,
+                                angle=signs[normalized] * reduced,
+                            )
+                finally:
+                    cancelled = self._turn_by_stop.is_set()
+                    self.stop()
+                segment = {
+                    "target_degrees": target,
+                    "measured_degrees": round(segment_measured, 2),
+                    "elapsed_seconds": round(self._monotonic() - segment_start, 3),
+                    "reached": segment_reason == "target_reached",
+                    "reason": "cancelled" if cancelled else segment_reason,
+                }
+                segments.append(segment)
+                if not segment["reached"]:
+                    reason = segment["reason"]
                     break
-                if elapsed >= max_seconds:
-                    break
-                remaining = degrees - measured
-                if remaining < 30:
-                    reduced = max(3, min(angle, round(angle * remaining / 30)))
-                    self.move(
-                        gait=gait, x=1, y=0, angle=signs[normalized] * reduced
-                    )
-            if self._turn_by_stop.is_set() and not reached:
-                reason = "cancelled"
+            else:
+                reached = True
+                reason = "target_reached"
         finally:
             self.stop()
             elapsed = self._monotonic() - start
@@ -441,6 +490,7 @@ class FreenoveDevice:
             "reached": reached,
             "reason": reason,
             "measurement": "integrated_mpu6050_z_gyro",
+            "segments": segments,
         }
 
     def body_height(self, level="normal"):
@@ -938,7 +988,7 @@ class FreenoveDevice:
             name
             for name in (
                 "attitude", "balance", "ball_start", "ball_state", "ball_stop",
-                "body_height", "distance_read",
+                "body_height", "distance_read", "emergency_stop",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
                 "head_horizontal", "head_pose", "head_vertical", "imu_read", "led_color",
                 "led_mode", "leg_positions", "lift_leg", "lower_all_legs", "lower_leg",
@@ -1015,7 +1065,11 @@ class Handler(socketserver.StreamRequestHandler):
                 response = {"id": request_id, "ok": True, "result": result}
             except Exception as exc:
                 response = {"id": request_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
-            self.wfile.write(json.dumps(response, default=repr).encode() + b"\n")
+            try:
+                self.wfile.write(json.dumps(response, default=repr).encode() + b"\n")
+            except (BrokenPipeError, ConnectionResetError):
+                # The client timing out must never terminate the bridge process.
+                return
 
 
 def main():
