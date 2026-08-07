@@ -63,6 +63,7 @@ class ArmController:
         image_writer: Callable[[str, Any], bool] | None = None,
         capture_dir: Path | None = None,
         command_interval: float = 0.1,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         if not library_path.is_file():
             raise RobotError(f"Arm_Lib.py was not found: {library_path}")
@@ -77,6 +78,7 @@ class ArmController:
         self._camera = None
         self.capture_dir = capture_dir or Path("/tmp/acamp-robot-captures")
         self.command_interval = max(0.0, float(command_interval))
+        self._sleep = sleep
         self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
@@ -104,9 +106,9 @@ class ArmController:
             raise ValueError("duration_ms must be between 100 and 5000")
         return duration_ms
 
-    def _settle_command(self):
-        if self.command_interval:
-            time.sleep(self.command_interval)
+    def _settle_command(self, duration_ms: int):
+        # Arm_Lib returns when it accepts a timed move, not when motion finishes.
+        self._sleep(duration_ms / 1000.0 + self.command_interval)
 
     def _ensure_torque(self):
         # Each CLI call creates a fresh controller, so in-memory state cannot reveal
@@ -115,11 +117,12 @@ class ArmController:
 
     def move_joint(self, joint: int, angle: int, duration_ms: int = 500) -> Any:
         joint, angle = self._validate_joint(joint, angle)
+        duration_ms = self._validate_duration(duration_ms)
         self._ensure_torque()
         result = self.device.Arm_serial_servo_write(
-            joint, angle, self._validate_duration(duration_ms)
+            joint, angle, duration_ms
         )
-        self._settle_command()
+        self._settle_command(duration_ms)
         return result
 
     def read_joint(self, joint: int) -> Any:
@@ -130,11 +133,12 @@ class ArmController:
         if len(joints) != 6:
             raise ValueError("joints must contain six angles")
         checked = [self._validate_joint(index, angle)[1] for index, angle in enumerate(joints, 1)]
+        duration_ms = self._validate_duration(duration_ms)
         self._ensure_torque()
         result = self.device.Arm_serial_servo_write6_array(
-            checked, self._validate_duration(duration_ms)
+            checked, duration_ms
         )
-        self._settle_command()
+        self._settle_command(duration_ms)
         return result
 
     def home(self, duration_ms: int = 1000) -> Any:

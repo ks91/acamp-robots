@@ -178,6 +178,8 @@ The arm instruction module includes every color-sorting and garbage-sorting coor
 
 The instructions also state general embodied-planning invariants for smaller models: contact precedes grasp, grasp precedes lift, arrival precedes release, and release precedes withdrawal. Grasping and release change only joint 6 while joints 1–5 hold the contact pose; they are never merged with lifting or withdrawal.
 
+Every arm movement waits for its complete servo duration plus the vendor-required 100 ms command interval before returning. Sequential CLI calls therefore cannot overlap an unfinished approach, gripper closure, and lift.
+
 In a session started by `scripts/start-agent.sh`, the staff safety check applies to the whole session. The agent executes bounded DOFBOT movements and complete requested sorting sequences without asking the member for repeated safety confirmations between movements.
 
 Hexapod example:

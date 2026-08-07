@@ -26,7 +26,7 @@ def make_library(path: Path):
 def arm(tmp_path):
     library = tmp_path / "Arm_Lib.py"
     make_library(library)
-    return ArmController(library, command_interval=0)
+    return ArmController(library, command_interval=0, sleep=lambda _seconds: None)
 
 
 def test_arm_exposes_the_expected_public_capabilities(arm):
@@ -72,6 +72,16 @@ def test_motion_reenables_torque_after_rest(arm):
 def test_fresh_controller_always_enables_torque_before_motion(arm):
     arm.home()
     assert arm.device.calls[-2][0:2] == ("torque", 1)
+
+
+def test_servo_commands_wait_until_physical_motion_finishes(tmp_path):
+    library = tmp_path / "Arm_Lib.py"
+    make_library(library)
+    waits = []
+    arm = ArmController(library, command_interval=0.1, sleep=waits.append)
+    arm.move_joints([90, 43, 36, 40, 90, 30], 1000)
+    arm.move_joint(6, 135, 500)
+    assert waits == [1.1, 0.6]
 
 
 def test_led_and_buzzer_calls_are_bounded(arm):
