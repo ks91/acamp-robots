@@ -149,6 +149,26 @@ def test_known_preset_is_named_and_unknown_presets_are_rejected(arm):
         arm.move_preset("invented")
 
 
+def test_all_legacy_sorting_coordinates_are_preserved(arm):
+    expected = {
+        "color_view": [90, 120, 0, 0, 90, 30],
+        "color_grab": [90, 43, 36, 40, 90, 30],
+        "color_lift": [90, 80, 35, 40, 90, 135],
+        "color_red": [117, 19, 66, 56, 90, 135],
+        "color_blue": [44, 66, 20, 28, 90, 135],
+        "color_green": [136, 66, 20, 29, 90, 135],
+        "color_yellow": [65, 22, 64, 56, 90, 135],
+        "garbage_view": [90, 90, 15, 20, 90, 30],
+        "garbage_grab": [90, 40, 30, 67, 265, 30],
+        "garbage_lift": [90, 80, 50, 50, 265, 135],
+        "garbage_hazardous": [45, 80, 35, 40, 265, 135],
+        "garbage_recyclable": [27, 110, 0, 40, 265, 135],
+        "garbage_kitchen": [152, 110, 0, 40, 265, 135],
+        "garbage_other": [137, 80, 35, 40, 265, 135],
+    }
+    assert {name: arm.PRESETS[name] for name in expected} == expected
+
+
 def test_camera_facing_and_work_area_poses_are_not_conflated(arm):
     forward = arm.pose_info("camera_forward")
     work_area = arm.pose_info("camera_work_area")

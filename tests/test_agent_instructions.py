@@ -63,6 +63,9 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert ".venv/bin/acamp-robot call pose_info POSE_NAME" in arm
     assert "Do not refuse merely because there is no preset" in arm
     assert "hexapod_pose look|grab|drop BASE_ANGLE" in arm
+    assert "`color_red` = `[117, 19, 66, 56, 90, 135]`" in arm
+    assert "`garbage_recyclable` = `[27, 110, 0, 40, 265, 135]`" in arm
+    assert "pickup, grip, lift, destination, release, and return" in arm
 
 
 def test_hexapod_module_contains_rpc_direction_and_rest_semantics():

@@ -35,7 +35,25 @@
 
 ## Legacy task poses
 
-- Color and garbage sorting presets from the 01 environment remain available through `move_preset`; move through `home` between separated pickup and drop work areas when collision clearance is uncertain.
+- The following 01 color-sorting coordinates are authoritative. They are named presets, but the member and agent may combine them creatively rather than treating sorting as a fixed task:
+  - inspect the box: `color_view` = `[90, 120, 0, 0, 90, 30]`
+  - approach with the gripper open: `color_grab` = `[90, 43, 36, 40, 90, 30]`
+  - lift a held box: `color_lift` = `[90, 80, 35, 40, 90, 135]`
+  - red destination: `color_red` = `[117, 19, 66, 56, 90, 135]`
+  - blue destination: `color_blue` = `[44, 66, 20, 28, 90, 135]`
+  - green destination: `color_green` = `[136, 66, 20, 29, 90, 135]`
+  - yellow destination: `color_yellow` = `[65, 22, 64, 56, 90, 135]`
+- For a 3 cm box, close the gripper to approximately 134–135 degrees after reaching `color_grab`; use 30 degrees to release it. For another measured width, use `grip_object WIDTH_CM` rather than guessing.
+- The following 01 garbage-sorting coordinates are authoritative:
+  - inspect the attached item: `garbage_view` = `[90, 90, 15, 20, 90, 30]`
+  - approach with the gripper open: `garbage_grab` = `[90, 40, 30, 67, 265, 30]`
+  - lift a held box: `garbage_lift` = `[90, 80, 50, 50, 265, 135]`
+  - hazardous/red destination: `garbage_hazardous` = `[45, 80, 35, 40, 265, 135]`
+  - recyclable/blue destination: `garbage_recyclable` = `[27, 110, 0, 40, 265, 135]`
+  - kitchen/green destination: `garbage_kitchen` = `[152, 110, 0, 40, 265, 135]`
+  - other/gray destination: `garbage_other` = `[137, 80, 35, 40, 265, 135]`
+- To classify either kind of box, move to its inspection pose, capture a fresh image, inspect the actual image, and decide from visible evidence. Then compose the pickup, grip, lift, destination, release, and return movements from the coordinates above. Do not claim a color, item, or garbage category from status or a stale image.
+- Move through `home` before switching between separated inspection, pickup, and destination areas when the direct path could collide with a box, board, another robot, or the table. Preserve the held gripper angle until the box reaches its destination.
 - For collaboration with a Hexapod carrying a box, use `hexapod_pose look|grab|drop BASE_ANGLE`. The base angle is deliberately supplied at runtime because the Hexapod may approach from different directions. Use camera observations and bounded `target_step` corrections instead of guessing that angle.
 
 ## Target tracking
