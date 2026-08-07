@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 10
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 11
 
 
 class FakeThread:
@@ -33,6 +33,26 @@ class FakeServo:
         self.last = (channel, angle)
 
 
+class FakeIMUSensor:
+    def __init__(self):
+        self.gyro_z = 0.0
+
+    def get_accel_data(self):
+        return {"x": 0.0, "y": 0.0, "z": 9.8}
+
+    def get_gyro_data(self):
+        return {"x": 1.0, "y": 2.0, "z": self.gyro_z}
+
+    def get_temp(self):
+        return 24.5
+
+
+class FakeIMU:
+    def __init__(self):
+        self.sensor = FakeIMUSensor()
+        self.error_gyro_data = {"x": 0.0, "y": 0.0, "z": 0.0}
+
+
 class FakeControl:
     def __init__(self):
         self.condition_thread = FakeThread()
@@ -43,6 +63,7 @@ class FakeControl:
         self.leg_positions = [[140, 0, -30] for _ in range(6)]
         self.calibration_angles = [[0, 0, 0] for _ in range(6)]
         self.set_leg_angles_calls = 0
+        self.imu = FakeIMU()
 
     def check_point_validity(self):
         return True
@@ -68,7 +89,8 @@ def test_bridge_exposes_complete_semantic_motion_surface():
     capabilities = set(MODULE.FreenoveDevice(FakeControl()).capabilities())
     assert {
         "walk", "turn", "body_height", "perform", "lift_leg", "lower_leg",
-        "lower_all_legs", "stand", "stop", "rest"
+        "lower_all_legs", "imu_read", "tilt_read", "turn_by", "head_pose",
+        "leg_positions", "distance_read", "stand", "stop", "rest"
     } <= capabilities
 
 
@@ -204,6 +226,137 @@ def test_turn_translates_named_rotation_without_guessing_coordinates(
     robot._cancel_stop_timer()
     assert control.command_queue == ["CMD_MOVE", "1", "1", "0", "8", expected_angle]
     assert result["direction"] == direction
+
+
+def test_imu_read_returns_averaged_values_with_explicit_units():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    result = robot.imu_read(samples=2)
+    assert result == {
+        "acceleration_m_s2": {"x": 0.0, "y": 0.0, "z": 9.8},
+        "angular_velocity_deg_s": {"x": 1.0, "y": 2.0, "z": 0.0},
+        "temperature_c": 24.5,
+        "samples": 2,
+    }
+
+
+def test_tilt_read_uses_acceleration_without_claiming_a_yaw_heading():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    result = robot.tilt_read(samples=1)
+    assert result["roll_degrees"] == pytest.approx(0)
+    assert result["pitch_degrees"] == pytest.approx(0)
+    assert result["yaw_available"] is False
+
+
+def test_turn_by_integrates_z_gyro_and_stops_near_requested_relative_angle():
+    control = FakeControl()
+    control.imu.sensor.gyro_z = 100.0
+    robot = MODULE.FreenoveDevice(control)
+
+    class Clock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+        def sleep(self, duration):
+            self.value += duration
+
+    clock = Clock()
+    robot._monotonic = clock
+    robot._sleep = clock.sleep
+    result = robot.turn_by("clockwise", 90, max_seconds=2, sample_interval=0.1)
+    assert result["reached"] is True
+    assert result["measured_degrees"] == pytest.approx(90)
+    assert result["direction"] == "clockwise"
+    assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
+
+
+def test_turn_by_times_out_and_stops_when_gyro_does_not_observe_rotation():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+
+    class Clock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+        def sleep(self, duration):
+            self.value += duration
+
+    clock = Clock()
+    robot._monotonic = clock
+    robot._sleep = clock.sleep
+    result = robot.turn_by("counterclockwise", 180, max_seconds=0.3, sample_interval=0.1)
+    assert result["reached"] is False
+    assert result["reason"] == "timeout"
+    assert control.command_queue == ["CMD_MOVE", "1", "0", "0", "8", "0"]
+
+
+def test_turn_by_reports_external_stop_as_cancellation():
+    control = FakeControl()
+    control.imu.sensor.gyro_z = 20
+    robot = MODULE.FreenoveDevice(control)
+
+    class Clock:
+        value = 0.0
+
+        def __call__(self):
+            return self.value
+
+        def sleep(self, duration):
+            self.value += duration
+            robot.stop()
+
+    clock = Clock()
+    robot._monotonic = clock
+    robot._sleep = clock.sleep
+    result = robot.turn_by("clockwise", 180, max_seconds=2, sample_interval=0.1)
+    assert result["reached"] is False
+    assert result["reason"] == "cancelled"
+
+
+def test_turn_by_rejects_unbounded_angles_and_runtime():
+    robot = MODULE.FreenoveDevice(FakeControl())
+    for degrees in (0, 361):
+        with pytest.raises(ValueError, match="degrees"):
+            robot.turn_by("clockwise", degrees)
+    with pytest.raises(ValueError, match="max_seconds"):
+        robot.turn_by("clockwise", 90, max_seconds=5.1)
+
+
+def test_named_head_poses_and_leg_position_observation_are_available():
+    control = FakeControl()
+    robot = MODULE.FreenoveDevice(control)
+    assert robot.head_pose("left") == {
+        "accepted": True, "pose": "left", "horizontal": 120, "vertical": 90
+    }
+    positions = robot.leg_positions()
+    assert positions == [[140, 0, -30] for _ in range(6)]
+    positions[0][0] = 999
+    assert control.leg_positions[0][0] == 140
+
+
+def test_distance_read_reports_robust_ultrasonic_summary(monkeypatch):
+    class Ultrasonic:
+        readings = iter([31.0, 29.0, 100.0, None, 30.0])
+
+        def get_distance(self):
+            return next(self.readings)
+
+    robot = MODULE.FreenoveDevice(FakeControl())
+    robot._peripherals["ultrasonic"] = Ultrasonic()
+    monkeypatch.setattr(robot, "_sleep", lambda duration: None)
+    result = robot.distance_read(samples=5, interval=0.01)
+    assert result == {
+        "unit": "cm",
+        "median": 30.5,
+        "minimum": 29.0,
+        "maximum": 100.0,
+        "readings": [31.0, 29.0, 100.0, 30.0],
+        "samples_requested": 5,
+        "samples_valid": 4,
+    }
 
 
 @pytest.mark.parametrize(

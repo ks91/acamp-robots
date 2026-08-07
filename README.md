@@ -185,6 +185,8 @@ robot.call("rest")
 robot.call("walk", "forward", 1.0)
 # Turn clockwise for one second.
 robot.call("turn", "clockwise", 1.0)
+# Measure a relative 180-degree clockwise turn with the onboard gyroscope.
+turn_result = robot.call("turn_by", "clockwise", 180)
 # Use a named whole-body height.
 robot.call("body_height", "high")
 # Run a short, stoppable whole-body performance.
@@ -196,13 +198,23 @@ robot.call("lower_leg", 1)
 image_path = robot.call("camera_capture", "view.jpg")
 ```
 
-Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The default step is 15; explicit steps from 1 through 30 are available for experiments. Use `turn` with `clockwise` or `counterclockwise` for rotation, and `body_height` with `low`, `normal`, or `high` for named height changes. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move`, `position`, and `attitude` methods remain available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
+Use `forward`, `backward`, `left`, or `right` for participant-facing movement. The default step is 15; explicit steps from 1 through 30 are available for experiments. Use timed `turn` with `clockwise` or `counterclockwise` for open-loop rotation. Use `turn_by DIRECTION DEGREES` for a gyro-measured relative rotation such as 180 degrees; it integrates MPU6050 Z-axis angular velocity, slows near the target, stops within five seconds, and explicitly reports success or timeout. It is not an absolute compass heading. Use `body_height` with `low`, `normal`, or `high` for named height changes. The bridge translates these names to Freenove's coordinate system and guarantees a server-side stop after at most five seconds. The lower-level `timed_move`, `position`, and `attitude` methods remain available for tested behaviors that need explicit coordinates; Freenove uses positive `y` for forward and positive `x` for right.
 
 The bridge also exposes the complete capability surface from the previous `multimodal-hexapod-rpc.py` environment: both gait modes, bounded translation and rotation, speed, body position and attitude, IMU balance, camera-head control, buzzer and LED control, camera capture, ultrasonic distance, battery voltage, red-ball tracking, servo power, and per-leg position, servo-angle, and calibrated joint-angle control. Red-ball tracking processes fresh camera frames in memory and retains the former HSV threshold, contour-centroid calculation, and PID steering and distance controller. It smooths center and radius measurements, tolerates three consecutively dropped detections, and uses center and distance deadbands to avoid stop-start motion while still backing away when the ball is too close. Tracking telemetry is included in `status` for physical tuning.
 
 Short expressive performances are available through `perform`: `nod`, `sway`, `bounce`, `curious`, `happy`, `thinking`, and `rock_and_roll`. They use bounded posture and head movements, finish in neutral posture, and can be interrupted by `stop`. Query `capabilities` for the authoritative method list:
 
 Individual legs use human-facing numbers 1–6. `lift_leg LEG [LIFT]` raises only that leg by a bounded relative amount (default 30, range 5–40) and saves its previous position. `lower_leg LEG` restores it, while `lower_all_legs` restores every leg raised through this semantic API. Whole-body posture commands supersede those saved positions.
+
+Research observation primitives include `imu_read [SAMPLES]` for acceleration,
+angular velocity, and IMU temperature; `tilt_read [SAMPLES]` for gravity-derived
+roll and pitch; `sonic` for one low-latency forward ultrasonic reading;
+`distance_read [SAMPLES] [INTERVAL]` for a median, range, and the valid source
+readings in centimeters; `power`
+for supply measurements; `leg_positions` for all six current leg coordinates;
+and `camera_capture` for a fresh image. `head_pose` provides named center, left,
+right, up, and down camera-head positions. MPU6050 has no magnetometer, so no
+API claims to provide an absolute yaw or compass direction.
 
 ```bash
 .venv/bin/acamp-robot call capabilities

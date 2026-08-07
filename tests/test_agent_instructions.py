@@ -83,6 +83,11 @@ def test_hexapod_module_contains_rpc_direction_and_rest_semantics():
     assert ".venv/bin/acamp-robot call lift_leg LEG_NUMBER" in hexapod
     assert "1番の脚" in hexapod
     assert ".venv/bin/acamp-robot call lower_leg LEG_NUMBER" in hexapod
+    assert ".venv/bin/acamp-robot call imu_read" in hexapod
+    assert ".venv/bin/acamp-robot call tilt_read" in hexapod
+    assert ".venv/bin/acamp-robot call turn_by DIRECTION DEGREES" in hexapod
+    assert "relative angle" in hexapod
+    assert "does not provide an absolute compass heading" in hexapod
 
 
 def test_camp_template_contains_operational_sections():

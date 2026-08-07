@@ -9,6 +9,9 @@ STEPS = [
     {"call": "attitude", "args": [0, 0, 0]},
 ]
 
+# A measured turn can be one complete sequence by itself:
+# STEPS = [{"call": "turn_by", "args": ["clockwise", 180, 10, 1, 5]}]
+
 
 def run(robot):
     return run_hexapod_sequence(robot, STEPS)

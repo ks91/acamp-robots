@@ -5,15 +5,17 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import math
 import os
 import queue
 import socketserver
+import statistics
 import sys
 import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 10
+BRIDGE_PROTOCOL_VERSION = 11
 
 
 class _TrackingPID:
@@ -122,6 +124,11 @@ class FreenoveDevice:
         self._performance_stop = threading.Event()
         self._performance_lock = threading.Lock()
         self._lifted_leg_positions = {}
+        self._monotonic = time.monotonic
+        self._sleep = time.sleep
+        self._turn_by_stop = threading.Event()
+        self._turn_by_thread = None
+        self._turn_by_state = None
 
     @property
     def hardware_initialized(self):
@@ -207,6 +214,8 @@ class FreenoveDevice:
         if not -20 <= angle <= 20:
             raise ValueError("angle must be between -20 and 20")
         external_motion = threading.current_thread() is not self._ball_thread
+        if threading.current_thread() is not self._turn_by_thread:
+            self._turn_by_stop.set()
         if external_motion and self._ball_active:
             with self._lock:
                 self._ball_active = False
@@ -221,6 +230,7 @@ class FreenoveDevice:
 
     def stop(self):
         self._performance_stop.set()
+        self._turn_by_stop.set()
         with self._lock:
             self._cancel_stop_timer()
             self._moving = False
@@ -286,6 +296,153 @@ class FreenoveDevice:
         result.update({"direction": canonical, "angle": angle})
         return result
 
+    def imu_read(self, samples=1):
+        """Read calibrated-unit acceleration, angular velocity, and temperature."""
+        samples = int(samples)
+        if not 1 <= samples <= 50:
+            raise ValueError("samples must be between 1 and 50")
+        totals = {
+            "accel": {axis: 0.0 for axis in "xyz"},
+            "gyro": {axis: 0.0 for axis in "xyz"},
+            "temperature": 0.0,
+        }
+        sensor = self.control.imu.sensor
+        with self._lock:
+            for _ in range(samples):
+                accel = sensor.get_accel_data()
+                gyro = sensor.get_gyro_data()
+                for axis in "xyz":
+                    totals["accel"][axis] += float(accel[axis])
+                    totals["gyro"][axis] += float(gyro[axis])
+                totals["temperature"] += float(sensor.get_temp())
+        return {
+            "acceleration_m_s2": {
+                axis: round(totals["accel"][axis] / samples, 4) for axis in "xyz"
+            },
+            "angular_velocity_deg_s": {
+                axis: round(totals["gyro"][axis] / samples, 4) for axis in "xyz"
+            },
+            "temperature_c": round(totals["temperature"] / samples, 2),
+            "samples": samples,
+        }
+
+    def tilt_read(self, samples=5):
+        """Estimate roll and pitch from gravity; MPU6050 cannot give compass yaw."""
+        reading = self.imu_read(samples)
+        accel = reading["acceleration_m_s2"]
+        roll = math.degrees(math.atan2(accel["y"], accel["z"]))
+        pitch = math.degrees(
+            math.atan2(-accel["x"], math.hypot(accel["y"], accel["z"]))
+        )
+        return {
+            "roll_degrees": round(roll, 2),
+            "pitch_degrees": round(pitch, 2),
+            "yaw_available": False,
+            "source": "accelerometer",
+        }
+
+    def turn_by(
+        self,
+        direction,
+        degrees,
+        angle=10,
+        gait=1,
+        max_seconds=5.0,
+        sample_interval=0.02,
+    ):
+        """Turn through a measured relative angle by integrating Z-axis gyro rate."""
+        normalized = str(direction).lower().replace("-", "").replace("_", "")
+        signs = {
+            "clockwise": 1,
+            "cw": 1,
+            "counterclockwise": -1,
+            "anticlockwise": -1,
+            "ccw": -1,
+        }
+        if normalized not in signs:
+            raise ValueError("direction must be clockwise or counterclockwise")
+        degrees = float(degrees)
+        if not 0 < degrees <= 360:
+            raise ValueError("degrees must be greater than 0 and at most 360")
+        max_seconds = float(max_seconds)
+        if not 0 < max_seconds <= 5:
+            raise ValueError("max_seconds must be greater than 0 and at most 5")
+        sample_interval = float(sample_interval)
+        if not 0.01 <= sample_interval <= 0.1:
+            raise ValueError("sample_interval must be between 0.01 and 0.1")
+        angle = int(angle)
+        if not 3 <= angle <= 20:
+            raise ValueError("angle must be between 3 and 20")
+        gait = int(gait)
+        if gait not in (1, 2):
+            raise ValueError("gait must be 1 or 2")
+
+        if self._ball_active:
+            self.ball_stop()
+        self.stop()
+        self._turn_by_stop.clear()
+        self._turn_by_thread = threading.current_thread()
+        canonical = "clockwise" if signs[normalized] > 0 else "counterclockwise"
+        sensor = self.control.imu.sensor
+        gyro_bias = float(getattr(self.control.imu, "error_gyro_data", {}).get("z", 0))
+        measured = 0.0
+        start = last = self._monotonic()
+        reached = False
+        reason = "timeout"
+        self._turn_by_state = {
+            "active": True,
+            "direction": canonical,
+            "target_degrees": degrees,
+            "measured_degrees": 0.0,
+        }
+        try:
+            self.move(gait=gait, x=1, y=0, angle=signs[normalized] * angle)
+            while not self._turn_by_stop.is_set():
+                self._sleep(sample_interval)
+                now = self._monotonic()
+                elapsed = now - start
+                rate = abs(float(sensor.get_gyro_data()["z"]) - gyro_bias)
+                if rate >= 1.5:
+                    measured += rate * max(0.0, now - last)
+                last = now
+                self._turn_by_state["measured_degrees"] = round(measured, 2)
+                if measured >= degrees:
+                    reached = True
+                    reason = "target_reached"
+                    break
+                if elapsed >= max_seconds:
+                    break
+                remaining = degrees - measured
+                if remaining < 30:
+                    reduced = max(3, min(angle, round(angle * remaining / 30)))
+                    self.move(
+                        gait=gait, x=1, y=0, angle=signs[normalized] * reduced
+                    )
+            if self._turn_by_stop.is_set() and not reached:
+                reason = "cancelled"
+        finally:
+            self.stop()
+            elapsed = self._monotonic() - start
+            self._turn_by_thread = None
+            self._turn_by_state = {
+                "active": False,
+                "direction": canonical,
+                "target_degrees": degrees,
+                "measured_degrees": round(measured, 2),
+                "reached": reached,
+                "reason": reason,
+            }
+        return {
+            "accepted": True,
+            "direction": canonical,
+            "target_degrees": degrees,
+            "measured_degrees": round(measured, 2),
+            "elapsed_seconds": round(elapsed, 3),
+            "reached": reached,
+            "reason": reason,
+            "measurement": "integrated_mpu6050_z_gyro",
+        }
+
     def body_height(self, level="normal"):
         """Set one of three tested body heights without exposing coordinate signs."""
         heights = {"low": -15, "normal": 0, "high": 15}
@@ -346,6 +503,28 @@ class FreenoveDevice:
     def head_horizontal(self, angle=90):
         with self._lock:
             self.control.servo.set_servo_angle(1, max(0, min(int(angle), 180)))
+
+    def head_pose(self, pose="center"):
+        poses = {
+            "center": (90, 90),
+            "forward": (90, 90),
+            "left": (120, 90),
+            "right": (60, 90),
+            "up": (90, 120),
+            "down": (90, 70),
+        }
+        pose = str(pose).lower()
+        if pose not in poses:
+            raise ValueError("pose must be center, forward, left, right, up, or down")
+        horizontal, vertical = poses[pose]
+        self.head_horizontal(horizontal)
+        self.head_vertical(vertical)
+        return {
+            "accepted": True,
+            "pose": pose,
+            "horizontal": horizontal,
+            "vertical": vertical,
+        }
 
     def buzzer_on(self):
         self._peripheral("buzzer", "buzzer", "Buzzer").set_state(True)
@@ -428,6 +607,33 @@ class FreenoveDevice:
 
     def sonic(self):
         return self._peripheral("ultrasonic", "ultrasonic", "Ultrasonic").get_distance()
+
+    def distance_read(self, samples=5, interval=0.05):
+        """Return a robust summary of several forward ultrasonic readings."""
+        samples = int(samples)
+        if not 1 <= samples <= 20:
+            raise ValueError("samples must be between 1 and 20")
+        interval = float(interval)
+        if not 0 <= interval <= 0.2:
+            raise ValueError("interval must be between 0 and 0.2")
+        readings = []
+        for index in range(samples):
+            value = self.sonic()
+            if value is not None:
+                readings.append(float(value))
+            if interval and index + 1 < samples:
+                self._sleep(interval)
+        if not readings:
+            raise RuntimeError("Ultrasonic sensor returned no valid readings")
+        return {
+            "unit": "cm",
+            "median": round(statistics.median(readings), 2),
+            "minimum": round(min(readings), 2),
+            "maximum": round(max(readings), 2),
+            "readings": readings,
+            "samples_requested": samples,
+            "samples_valid": len(readings),
+        }
 
     def power(self):
         return self._peripheral("adc", "adc", "ADC").read_battery_voltage()
@@ -637,6 +843,11 @@ class FreenoveDevice:
                 lowered.append(leg_index + 1)
         return {"accepted": True, "lowered_legs": lowered}
 
+    def leg_positions(self):
+        """Return a defensive copy of all six current vendor-frame positions."""
+        with self._lock:
+            return [list(position) for position in self.control.leg_positions]
+
     def set_leg_position(self, leg_index, x, y, z):
         self._ensure_manual_leg_allowed()
         leg_index = int(leg_index)
@@ -704,6 +915,7 @@ class FreenoveDevice:
             "servo_power": self._servo_power,
             "speed": self.move_speed,
             "last_command": self._last_command,
+            "turn_by": self._turn_by_state,
             "ball_tracking": {
                 "active": self._ball_active,
                 "tracking": self._ball_tracking,
@@ -726,14 +938,15 @@ class FreenoveDevice:
             name
             for name in (
                 "attitude", "balance", "ball_start", "ball_state", "ball_stop",
-                "body_height",
+                "body_height", "distance_read",
                 "buzzer_off", "buzzer_on", "camera_capture", "connect", "disconnect",
-                "head_horizontal", "head_vertical", "led_color", "led_mode", "lift_leg",
-                "lower_all_legs", "lower_leg", "position", "move", "perform", "power",
+                "head_horizontal", "head_pose", "head_vertical", "imu_read", "led_color",
+                "led_mode", "leg_positions", "lift_leg", "lower_all_legs", "lower_leg",
+                "position", "move", "perform", "power",
                 "rest", "servopower", "set_leg_joint_angles",
                 "set_leg_joint_angles_all", "set_leg_position", "set_leg_positions",
                 "set_leg_servo_angles", "set_leg_servo_angles_all", "sonic", "speed",
-                "stand", "stop", "timed_move", "turn", "walk",
+                "stand", "stop", "tilt_read", "timed_move", "turn", "turn_by", "walk",
             )
         )
 
@@ -785,7 +998,7 @@ class Handler(socketserver.StreamRequestHandler):
                 else:
                     peripheral_methods = {
                         "buzzer_off", "buzzer_on", "camera_capture", "capabilities",
-                        "led_color", "led_mode", "power", "rest", "sonic",
+                        "distance_read", "led_color", "led_mode", "power", "rest", "sonic",
                     }
                     if not self.server.device.hardware_initialized and method not in peripheral_methods:
                         if method not in {"connect", "servopower", "stand"}:

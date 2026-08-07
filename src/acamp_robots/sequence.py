@@ -24,6 +24,7 @@ _ALLOWED_HEXAPOD_CALLS = {
     "position",
     "stop",
     "turn",
+    "turn_by",
     "walk",
 }
 
@@ -53,6 +54,13 @@ def validate_hexapod_sequence(
             if not 0 < duration <= 5:
                 raise SequenceValidationError(f"step {index} duration must be at most 5")
             estimated_seconds += duration
+        elif method == "turn_by":
+            max_seconds_arg = float(args[4]) if len(args) >= 5 else 5.0
+            if not 0 < max_seconds_arg <= 5:
+                raise SequenceValidationError(
+                    f"step {index} turn_by max_seconds must be at most 5"
+                )
+            estimated_seconds += max_seconds_arg
         elif method == "perform":
             estimated_seconds += 1.5
         estimated_seconds += pause
