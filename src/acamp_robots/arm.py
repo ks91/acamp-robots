@@ -66,6 +66,9 @@ class ArmController:
         sleep: Callable[[float], None] = time.sleep,
         task_stop_file: Path | None = None,
         task_beat_seconds: float = 0.5,
+        gripper_settle_timeout: float = 2.0,
+        gripper_poll_seconds: float = 0.1,
+        gripper_angle_tolerance: int = 3,
     ):
         if not library_path.is_file():
             raise RobotError(f"Arm_Lib.py was not found: {library_path}")
@@ -83,6 +86,9 @@ class ArmController:
         self._sleep = sleep
         self.task_stop_file = task_stop_file or Path("/tmp/acamp-arm-task-stop")
         self.task_beat_seconds = max(0.0, float(task_beat_seconds))
+        self.gripper_settle_timeout = max(0.0, float(gripper_settle_timeout))
+        self.gripper_poll_seconds = max(0.0, float(gripper_poll_seconds))
+        self.gripper_angle_tolerance = max(0, int(gripper_angle_tolerance))
         self._torque_enabled = True
 
     def capabilities(self) -> list[str]:
@@ -175,6 +181,29 @@ class ArmController:
     def _task_gripper(self, angle: int, duration_ms: int = 500):
         self._check_task_cancelled()
         self.move_joint(6, angle, duration_ms)
+        attempts = max(
+            1,
+            math.ceil(
+                self.gripper_settle_timeout / max(self.gripper_poll_seconds, 0.001)
+            ),
+        )
+        last_angle = None
+        for attempt in range(attempts):
+            self._check_task_cancelled()
+            last_angle = self.read_joint(6)
+            try:
+                reached = abs(int(last_angle) - int(angle)) <= self.gripper_angle_tolerance
+            except (TypeError, ValueError):
+                reached = False
+            if reached:
+                break
+            if attempt + 1 < attempts:
+                self._sleep(self.gripper_poll_seconds)
+        else:
+            raise RobotError(
+                f"Arm gripper did not reach {angle} degrees "
+                f"(last reading: {last_angle!r})"
+            )
         self._check_task_cancelled()
 
     def _task_beat(self):
