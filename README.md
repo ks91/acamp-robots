@@ -19,6 +19,20 @@ cd acamp-robots
 ./scripts/setup.sh --robot hexapod  # Freenove
 ```
 
+Setup always installs the offline test runner and creates the Git-ignored
+`projects/` research workspace. To prepare a Raspberry Pi for AprilTag/ArUco
+camera research, do this once before camp:
+
+```bash
+./scripts/setup.sh --robot hexapod --research-vision \
+  --hexapod-server-dir "$HOME/Freenove_Hexapod/Code/Server"
+```
+
+`--research-vision` installs NumPy and an OpenCV build containing the `aruco`
+module, then fails setup if marker detection is unavailable. Both supported
+robots create their virtual environments with access to system packages used
+by Raspberry Pi cameras and vendor images.
+
 If the Freenove Server is already installed elsewhere on the Raspberry Pi, save that absolute path in the device configuration:
 
 ```bash
@@ -209,6 +223,58 @@ The command-line interface provides the same basic access:
 
 Reusable participant-created behaviors belong in [`skills/`](skills/), with one directory per behavior. These robot skills should use the public `acamp_robots` API and include an offline test where practical. They are separate from Codex skills and must not be installed into `~/.codex/skills`.
 
+## Local research projects
+
+Member experiments should begin in the Git-ignored `projects/` workspace. This
+keeps local code, observations, and captures out of the public repository and
+prevents a routine `git pull` from colliding with active research work.
+
+Create a project with a lowercase descriptive name:
+
+```bash
+.venv/bin/python scripts/new-project.py turn-around
+cd projects/turn-around
+../../.venv/bin/pytest -q test_behavior.py
+```
+
+The generated project contains a no-motion test double, a `behavior.py`
+starting point, a bounded Hexapod sequence example, an optional marker-vision
+example, and an anonymous JSON Lines experiment log. `ExperimentLog` records a question, hypothesis, parameters,
+observation, result, and relative artifact paths without requiring participant
+identity.
+
+`run_hexapod_sequence` accepts semantic posture, head, named walking/turning,
+numbered-leg, performance, light, and buzzer calls. It rejects raw `move` and
+raw servo methods, limits pauses and estimated total duration, and calls
+`stop` after completion, interruption, or failure. Members can therefore make
+new bounded expressions such as a Noh-inspired movement without changing or
+pulling a new bridge version.
+
+The marker helper deliberately provides observations rather than a finished
+navigation algorithm:
+
+```python
+from acamp_robots.vision import detect_markers, horizontal_error
+
+markers = detect_markers("view.jpg")
+error_px = horizontal_error(markers[0], image_width=400)
+```
+
+It uses OpenCV's `DICT_APRILTAG_36h11` dictionary by default. A member can use
+the detected marker ID, corners, center, and pixel error to investigate a
+closed-loop `turn_by` behavior without changing the robot bridge.
+
+Check preparation before camp or before assigning a vision project:
+
+```bash
+.venv/bin/acamp-doctor --root .
+.venv/bin/acamp-doctor --root . --strict-vision
+```
+
+The first command checks the configuration, virtual environment, projects
+workspace, and reports optional vision support. The strict form fails if
+NumPy, OpenCV, or the AprilTag-capable marker backend is missing.
+
 ## Development and testing
 
 No physical robot is required:
@@ -221,7 +287,7 @@ python3 -m venv .venv
 
 The tests replace the external `Arm_Lib.py` and Unix-socket RPC endpoint with test doubles, allowing control logic to be checked before using real hardware.
 
-DOFBOT setup creates the virtual environment with access to Raspberry Pi system packages because the vendor library and OpenCV are installed separately on the robot image. If an existing arm `.venv` was created without system packages, remove only that environment and rerun `./scripts/setup.sh --robot arm`.
+Setup creates the virtual environment with access to Raspberry Pi system packages because vendor camera and OpenCV components are installed separately on the robot images. It also installs pytest for participant test-driven work. Existing Raspberry Pis configured before the research workspace was introduced should rerun `setup.sh` once; normal later code updates need only `git pull` and `start-agent.sh`.
 
 ## Safety
 

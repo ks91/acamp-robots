@@ -15,7 +15,7 @@
     "controller_factory": "acamp_robots.hexapod:create_controller",
     "instructions": ".agents/robots/hexapod.md",
     "prepare_command": ["scripts/hexapod-rpc.sh", "start"],
-    "system_site_packages": false,
+    "system_site_packages": true,
     "default_settings": {
       "hexapod_socket": "/tmp/acamp-hexapod.sock",
       "hexapod_server_dir": "hardware/freenove/Code/Server"

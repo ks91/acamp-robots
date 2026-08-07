@@ -35,6 +35,10 @@ def test_setup_is_registry_driven_and_supports_generic_settings():
     setup = (ROOT / "scripts/setup.sh").read_text()
     assert "robot-admin.py" in setup
     assert "--set KEY=VALUE" in setup
+    assert 'EXTRAS="dev"' in setup
+    assert "--research-vision" in setup
+    assert 'mkdir -p "$ROOT_DIR/projects"' in setup
+    assert "acamp-doctor" in setup
     assert '== "arm"' not in setup
     assert '== "hexapod"' not in setup
 

@@ -45,6 +45,9 @@ def test_common_instructions_are_robot_independent():
     assert "Freenove" not in common
     assert "Arm_Lib.py" not in common
     assert "Unix-socket" not in common
+    assert "Git-ignored `projects/`" in common
+    assert "scripts/new-project.py NAME" in common
+    assert "Promote a behavior from `projects/` to tracked `skills/`" in common
 
 
 def test_arm_module_contains_body_camera_and_language_semantics():

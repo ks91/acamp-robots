@@ -39,6 +39,9 @@
 - Do not install robot behaviors into `~/.codex/skills` or another global directory. A `-X` flag only skips confirmation prompts; it never changes destination or scope.
 - New behaviors use the public control API, begin with conservative limits, and include an offline test or test double where practical.
 - Review new behavior code and parameters locally before running it on physical hardware.
+- Exploratory research code, observations, and captures belong under the Git-ignored `projects/` directory so a normal `git pull` does not collide with member work. Create one with `.venv/bin/python scripts/new-project.py NAME` and begin with its offline test.
+- Promote a behavior from `projects/` to tracked `skills/` only when the member wants it to be reusable and its code, privacy, parameters, and offline tests have been reviewed.
+- Use `ExperimentLog` for anonymous structured trials. Do not add participant names or identifying media to experiment records.
 
 ## Development and verification
 
