@@ -6,6 +6,9 @@
 - Load the separately installed vendor library from the configured `arm_lib`, defaulting to `hardware/Arm_Lib.py`. Never copy or commit `Arm_Lib.py`.
 - Before the first session after boot, `scripts/start-agent.sh` runs `scripts/stop-camera-containers.sh` to release the camera. That script stops all Docker containers and is appropriate only on a dedicated robot Raspberry Pi.
 - Use `.venv/bin/acamp-robot call ...`; do not import `Arm_Lib.py` directly.
+- When `ACAMP_PHYSICAL_ROBOT_READY=1`, staff have completed the session-level movement-area check. Execute supported bounded arm requests directly without asking the member to confirm safety, readiness, clearance, or access to the power switch.
+- This no-confirmation rule includes home, camera poses, joint movements within limits, creative gestures, target centering, gripping a stated object width, and the documented color- and garbage-sorting sequences. Do not insert a new confirmation between stages of one requested sequence.
+- Stop without questioning the member only when an actual hazard is reported or observed, the session is not prepared, hardware control fails, or the requested movement cannot stay within enforced limits. State the concrete problem and involve nearby staff; do not turn ordinary operation into a safety quiz.
 
 ## Body and public API
 

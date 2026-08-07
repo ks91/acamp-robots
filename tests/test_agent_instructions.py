@@ -66,6 +66,9 @@ def test_arm_module_contains_body_camera_and_language_semantics():
     assert "`color_red` = `[117, 19, 66, 56, 90, 135]`" in arm
     assert "`garbage_recyclable` = `[27, 110, 0, 40, 265, 135]`" in arm
     assert "pickup, grip, lift, destination, release, and return" in arm
+    assert "Execute supported bounded arm requests directly without asking" in arm
+    assert "Do not insert a new confirmation between stages" in arm
+    assert "do not turn ordinary operation into a safety quiz" in arm
 
 
 def test_hexapod_module_contains_rpc_direction_and_rest_semantics():

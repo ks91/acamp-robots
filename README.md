@@ -176,6 +176,8 @@ Use `pose_info NAME` to inspect a pose's joints, purpose, and calculated tool po
 
 The arm instruction module includes every color-sorting and garbage-sorting coordinate from the 01 environment, including inspection, pickup, lift, and each destination pose. These remain composable body knowledge rather than hard-coded tasks: the agent inspects a fresh camera image, reasons about the visible color or attached item, and constructs the requested manipulation from the named poses and measured gripper control.
 
+In a session started by `scripts/start-agent.sh`, the staff safety check applies to the whole session. The agent executes bounded DOFBOT movements and complete requested sorting sequences without asking the member for repeated safety confirmations between movements.
+
 Hexapod example:
 
 ```python
