@@ -7,6 +7,7 @@ from typing import Any
 
 from .config import RobotConfig
 from .errors import RobotError
+from .usb_sensors import environment_read, microphone_level
 
 
 class HexapodController:
@@ -57,6 +58,14 @@ class HexapodController:
 
     def stop(self) -> Any:
         return self.call("stop")
+
+    def environment_read(self, port: str | None = None) -> dict[str, Any]:
+        return environment_read(port)
+
+    def microphone_level(
+        self, duration_seconds: float = 1.0, device: str | None = None
+    ) -> dict[str, Any]:
+        return microphone_level(duration_seconds, device)
 
 
 def create_controller(config: RobotConfig, root: Path) -> HexapodController:

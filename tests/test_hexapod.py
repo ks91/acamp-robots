@@ -49,3 +49,16 @@ def test_rpc_call_uses_newline_json_protocol(tmp_path):
     assert received["method"] == "move"
     assert received["args"] == [1]
     assert received["kwargs"] == {"x": 2}
+
+
+def test_usb_sensor_primitives_are_local_and_do_not_require_the_rpc_bridge(monkeypatch):
+    monkeypatch.setattr("acamp_robots.hexapod.environment_read", lambda port=None: {"port": port})
+    monkeypatch.setattr(
+        "acamp_robots.hexapod.microphone_level",
+        lambda duration, device=None: {"duration": duration, "device": device},
+    )
+    controller = HexapodController("/missing/socket")
+    assert controller.environment_read("/dev/ttyUSB0") == {"port": "/dev/ttyUSB0"}
+    assert controller.microphone_level(0.5, "default") == {
+        "duration": 0.5, "device": "default"
+    }

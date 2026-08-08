@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .config import RobotConfig
 from .errors import RobotError
+from .usb_sensors import environment_read, microphone_level
 
 
 class ArmController:
@@ -88,7 +89,7 @@ class ArmController:
     def capabilities(self) -> list[str]:
         return sorted(
             ("buzzer_off", "buzzer_on", "camera_capture", "capabilities",
-             "hexapod_pose", "home", "led_color", "move_joints", "move_preset", "pose_info", "read_joint",
+             "environment_read", "hexapod_pose", "home", "led_color", "microphone_level", "move_joints", "move_preset", "pose_info", "read_joint",
              "rest", "sort_color", "sort_garbage", "status", "stop", "tool_position", "torque")
         )
 
@@ -257,6 +258,14 @@ class ArmController:
 
     def buzzer_off(self) -> Any:
         return self.device.Arm_Buzzer_Off()
+
+    def environment_read(self, port: str | None = None) -> dict[str, Any]:
+        return environment_read(port)
+
+    def microphone_level(
+        self, duration_seconds: float = 1.0, device: str | None = None
+    ) -> dict[str, Any]:
+        return microphone_level(duration_seconds, device)
 
     def _open_camera(self):
         if self._camera is not None:

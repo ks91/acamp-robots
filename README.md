@@ -245,6 +245,38 @@ The command-line interface provides the same basic access:
 .venv/bin/acamp-robot call stop
 ```
 
+## USB research sensors
+
+Both robot controllers expose two local Raspberry Pi sensor primitives. They do
+not move the robot and the Hexapod versions do not require its motion RPC bridge.
+
+```bash
+# Omron 2JCIE-BU01(F1): one CRC-checked structured environmental reading
+.venv/bin/acamp-robot call environment_read
+
+# CGS-M3C: analyze 1 second of audio in memory and return levels only
+.venv/bin/acamp-robot call microphone_level 1.0
+```
+
+`environment_read` returns temperature, relative humidity, ambient light,
+barometric pressure, sound noise, eTVOC, eCO2, discomfort index, heat-stroke
+index, and vibration measures. It follows Omron's USB serial sample protocol at
+115200 bps and auto-detects USB ID `0590:00d4`. On systems where the device does
+not bind automatically, staff must load `ftdi_sio` and register that USB ID as
+described by Omron before the participant session. An explicit serial path such
+as `/dev/ttyUSB0` may be passed as the first argument.
+
+`microphone_level` accepts 0.1–5.0 seconds and returns RMS and peak dBFS. It uses
+ALSA `arecord`, selects the first USB Audio card when possible, keeps PCM only in
+memory, and writes no recording or voice data to disk. An explicit ALSA device
+such as `plughw:2,0` may be passed as the second argument.
+
+Test these first on an externally powered DOFBOT Raspberry Pi. Before moving the
+sensors to a battery-powered Hexapod, stop both robots, have staff move the USB
+devices, and check that the Hexapod remains stable while reading each sensor for
+only one short trial. A USB disconnect, undervoltage warning, reset, or unstable
+reading ends the test; do not retry until staff inspect power and connections.
+
 ## Robot skills
 
 Reusable participant-created behaviors belong in [`skills/`](skills/), with one directory per behavior. These robot skills should use the public `acamp_robots` API and include an offline test where practical. They are separate from Codex skills and must not be installed into `~/.codex/skills`.
