@@ -15,7 +15,7 @@ import threading
 import time
 from pathlib import Path
 
-BRIDGE_PROTOCOL_VERSION = 13
+BRIDGE_PROTOCOL_VERSION = 14
 
 
 class _TrackingPID:
@@ -652,7 +652,18 @@ class FreenoveDevice:
         }
 
     def power(self):
-        return self._peripheral("adc", "adc", "ADC").read_battery_voltage()
+        raw = self._peripheral("adc", "adc", "ADC").read_battery_voltage()
+        if not isinstance(raw, (list, tuple)) or len(raw) < 2:
+            raise RuntimeError(
+                "Hexapod ADC returned an invalid voltage pair; expected servo and Raspberry Pi voltages"
+            )
+        voltages = [float(raw[0]), float(raw[1])]
+        return {
+            "servo_voltage_v": voltages[0],
+            "raspberry_pi_voltage_v": voltages[1],
+            "raw_voltages": voltages,
+            "raw_order": ["servo_power", "raspberry_pi_power"],
+        }
 
     def ball_start(self):
         self.head_vertical(90)

@@ -224,8 +224,9 @@ Research observation primitives include `imu_read [SAMPLES]` for acceleration,
 angular velocity, and IMU temperature; `tilt_read [SAMPLES]` for gravity-derived
 roll and pitch; `sonic` for one low-latency forward ultrasonic reading;
 `distance_read [SAMPLES] [INTERVAL]` for a median, range, and the valid source
-readings in centimeters; `power`
-for supply measurements; `leg_positions` for all six current leg coordinates;
+readings in centimeters; `power` for named supply measurements, where
+`servo_voltage_v` is the first vendor ADC channel and `raspberry_pi_voltage_v`
+is the second; `leg_positions` for all six current leg coordinates;
 and `camera_capture` for a fresh image. `head_pose` provides named center, left,
 right, up, and down camera-head positions. MPU6050 has no magnetometer, so no
 API claims to provide an absolute yaw or compass direction.

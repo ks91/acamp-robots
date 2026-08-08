@@ -12,7 +12,7 @@ SPEC.loader.exec_module(MODULE)
 
 
 def test_bridge_protocol_version_is_explicit():
-    assert MODULE.BRIDGE_PROTOCOL_VERSION == 13
+    assert MODULE.BRIDGE_PROTOCOL_VERSION == 14
 
 
 class FakeThread:
@@ -92,6 +92,21 @@ def test_bridge_exposes_complete_semantic_motion_surface():
         "lower_all_legs", "imu_read", "tilt_read", "turn_by", "head_pose",
         "leg_positions", "distance_read", "stand", "stop", "rest"
     } <= capabilities
+
+
+def test_power_names_the_servo_and_raspberry_pi_voltage_channels():
+    class FakeADC:
+        def read_battery_voltage(self):
+            return [7.42, 5.08]
+
+    robot = MODULE.FreenoveDevice(FakeControl())
+    robot._peripheral = lambda *_args: FakeADC()
+    assert robot.power() == {
+        "servo_voltage_v": 7.42,
+        "raspberry_pi_voltage_v": 5.08,
+        "raw_voltages": [7.42, 5.08],
+        "raw_order": ["servo_power", "raspberry_pi_power"],
+    }
 
 
 def test_move_is_translated_to_freenove_command_queue():
