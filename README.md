@@ -249,6 +249,8 @@ The command-line interface provides the same basic access:
 
 Both robot controllers expose two local Raspberry Pi sensor primitives. They do
 not move the robot and the Hexapod versions do not require its motion RPC bridge.
+Driver registration, device diagnostics, power-test steps, and the checklist for
+adding another sensor are in [`docs/usb-sensors.md`](docs/usb-sensors.md).
 
 ```bash
 # Omron 2JCIE-BU01(F1): one CRC-checked structured environmental reading
@@ -262,9 +264,9 @@ not move the robot and the Hexapod versions do not require its motion RPC bridge
 barometric pressure, sound noise, eTVOC, eCO2, discomfort index, heat-stroke
 index, and vibration measures. It follows Omron's USB serial sample protocol at
 115200 bps and auto-detects USB ID `0590:00d4`. On systems where the device does
-not bind automatically, staff must load `ftdi_sio` and register that USB ID as
-described by Omron before the participant session. An explicit serial path such
-as `/dev/ttyUSB0` may be passed as the first argument.
+not bind automatically, follow the documented `ftdi_sio` registration before
+the participant session. An explicit serial path such as `/dev/ttyUSB0` may be
+passed as the first argument.
 
 `microphone_level` accepts 0.1–5.0 seconds and returns RMS and peak dBFS. It uses
 ALSA `arecord`, selects the first USB Audio card when possible, keeps PCM only in
